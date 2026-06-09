@@ -58,8 +58,6 @@ license per their instructions.
 
 ## Quick start
 
-### Run the main model (two-leader EPEC)
-
 ```bash
 python 11_epec_2leader.py
 ```
@@ -67,15 +65,6 @@ python 11_epec_2leader.py
 Runs the full Gauss–Seidel diagonalization. Total wall time ~60–90 minutes
 on a 16-thread workstation. Output includes per-iteration profits and a
 realised-path equilibrium table at the end.
-
-### Run the deterministic baseline (single-period, four leaders)
-
-```bash
-python 08_epec_diagonalization.py
-```
-
-The original deterministic 4-leader EPEC (USA + Australia + Russia + Qatar),
-no Bayesian tree, no convenience yield. Used as a comparison anchor.
 
 ---
 
@@ -85,8 +74,7 @@ no Bayesian tree, no convenience yield. Used as a comparison anchor.
 |---|---|
 | `lng_data.py` | Calibration data: break-even prices, transport costs, liquefaction capacities, region-access shares, and event definitions. Sourced from Zwickl-Neumann (2024) Table 6 and Appendix A. |
 | `scenario_tree.py` | Builds the 59-node Bayesian scenario tree. Maintains posterior Beta-Bernoulli beliefs over the two-state Markov chain transition rates. |
-| `11_epec_2leader.py` | **Main model.** Two-leader stochastic Stackelberg EPEC with Gauss–Seidel diagonalization. |
-| `08_epec_diagonalization.py` | Deterministic four-leader baseline (no scenario tree, single-period). |
+| `11_epec_2leader.py` | **The model.** Two-leader stochastic Stackelberg EPEC with Gauss–Seidel diagonalization. |
 | `ttf_history.csv` | Historical TTF spot prices for calibration / validation reference. |
 
 ---
