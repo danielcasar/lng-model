@@ -4,8 +4,8 @@ A multi-stage stochastic Stackelberg-EPEC model of the global liquefied
 natural gas (LNG) market, applied to the 2026 Strait of Hormuz closure
 scenario.
 
-Built for the TU Wien course *Advanced Energy System Modeling* (370.100,
-Unit 3 — Game Theory). Adapts the linear-programming framework of
+Built for the TU Wien course *Advanced Energy System Modeling* (370.100,). 
+Adapts the linear-programming framework of
 Zwickl-Bernhard and Neumann (2024) to a two-leader strategic equilibrium
 under a Bayesian scenario tree.
 
@@ -89,7 +89,6 @@ realised-path equilibrium table at the end.
 | EU winter seasonality | 1.65 | Eurostat 2018–23 typical |
 | EU storage cap | 100 bcm | GIE AGSI+ aggregate working gas |
 | EU Nov-1 mandate | 80% | Reg. 2017/1938 as amended 2022, flex provision |
-| Convenience yield (Apr–Oct) | −€5/MWh | Schwartz (1997) / Pirrong (2011) |
 | Bayesian prior on closure rate | Beta(5, 100), mean 4.76%/mo | Post-2014 GPR-index regime |
 | Bayesian prior on reopening rate | Beta(2, 12), mean 14.3%/mo | Historical chokepoint duration record |
 | Damping for diagonalization | α = 0.4 | Cournot-type damping convention |
