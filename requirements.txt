@@ -1,0 +1,5 @@
+pyomo>=6.7
+scipy>=1.10
+# Gurobi is a commercial solver — install separately from
+# https://www.gurobi.com/academia/ and apply an academic license.
+gurobipy>=11.0
