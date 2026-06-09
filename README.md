@@ -117,10 +117,15 @@ artefacts in multi-stage stochastic optimisation).
 
 MIT — see `LICENSE` file.
 
-## Citation
+## Author and citation
 
-If you use this code for academic work, please cite the underlying paper
-(in preparation) and the calibration source:
+Daniel Caesar (TU Wien), 2026. If you use this code, please cite the
+accompanying paper (in preparation) and reach out for the current draft.
+
+### Acknowledged data source
+
+The supply-side calibration (break-even prices, transport costs,
+liquefaction capacities, and route-access shares) is taken from:
 
 ```
 Zwickl-Bernhard, S. & Neumann, A. (2024). Modeling Europe's role in the
@@ -128,3 +133,7 @@ global LNG market 2040: Balancing decarbonization goals, energy security,
 and geopolitical tensions. Energy, 301, 131612.
 https://doi.org/10.1016/j.energy.2024.131612
 ```
+
+The strategic-equilibrium formulation, the Bayesian scenario tree, the
+EPEC reformulation, and the seasonal convenience-yield treatment are
+original contributions of this model.
