@@ -113,20 +113,7 @@ def leader_cap_at_node(L, node):
 # Re-calibrated EU block 1: 22 bcm (from AGSI+ peak winter throughput).
 # =============================================================================
 
-# Seasonal storage holding cost: positive in winter (storage is costly to
-# hold), negative during the injection season (April-October) to represent
-# the convenience yield of inventory under regulatory exposure to the Nov-1
-# mandate. The negative value during injection months captures the option
-# value / shadow yield that real storage shippers earn from holding inventory
-# during the build-up to winter, beyond what the pure spot-arbitrage Euler
-# would suggest. Standard convenience-yield form (Schwartz 1997; Pirrong
-# 2011). Magnitude calibrated to EUR 5/MWh, consistent with observed
-# summer-winter TTF spreads net of pure storage cost.
-def holding_cost_at(t):
-    m = calendar_month(t)
-    if m in {4, 5, 6, 7, 8, 9, 10}:    # injection season
-        return -5.0                     # convenience yield (negative cost)
-    return 0.10                         # winter: small physical holding cost
+HOLDING_COST = 0.10    # constant physical storage holding cost (EUR/MWh-month)
 
 # Demand-block WTPs re-anchored to industry fuel-switching prices (vs stylised
 # marginal-utility tiers). EU block 1 (essential heating + petrochemical):
@@ -182,7 +169,7 @@ S_by_r   = {r: list(fringe[r].keys()) for r in REGIONS}
 K_by_r   = {r: list(range(len(demand_blocks_base[r]))) for r in REGIONS}
 
 NOV_TARGETS_EU_NODES = [nid for nid in REALIZED_IDS if calendar_month(NODES[nid].t) == 10]
-EU_NOV_MIN           = 0.80 * storage["EU"]["S_max"]
+EU_NOV_MIN           = 0.90 * storage["EU"]["S_max"]    # Reg 2017/1938: 90% Nov-1 target
 TERMINAL_NODE_IDS    = [nid for nid, n in NODES.items() if not n.children and n.t == T_LAST]
 
 # =============================================================================
@@ -286,7 +273,7 @@ def build_leader_mpcc(L, others_q):
                            if node.cum_prob > 0 else 1.0
         expected_pi_next = sum((NODES[c].cum_prob / node.cum_prob if node.cum_prob > 0 else 0)
                                * mdl.pi[r, c] for c in node.children) / max(total_child_prob, 1e-9)
-        return mdl.pi[r, nid] - expected_pi_next + mdl.eta[r, nid] + holding_cost_at(NODES[nid].t) >= 0
+        return mdl.pi[r, nid] - expected_pi_next + mdl.eta[r, nid] + HOLDING_COST >= 0
     m.stat_stock = pyo.Constraint(m.R, m.N, rule=_stat_stock)
 
     # Fortuny-Amat Big-M complementarity
@@ -342,7 +329,7 @@ def build_leader_mpcc(L, others_q):
                                * mdl.pi[r, c] for c in node.children) \
                            / max(sum(NODES[c].cum_prob / node.cum_prob for c in node.children)
                                  if node.cum_prob > 0 else 1.0, 1e-9)
-        return (mdl.pi[r, nid] - expected_pi_next + mdl.eta[r, nid] + holding_cost_at(NODES[nid].t)) \
+        return (mdl.pi[r, nid] - expected_pi_next + mdl.eta[r, nid] + HOLDING_COST) \
                <= M_DUE * (1 - mdl.b_stock[r, nid])
     m.compl_stock_b = pyo.Constraint(m.R, m.N, rule=_compl_stock_b)
 
