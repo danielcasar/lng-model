@@ -165,8 +165,14 @@ HOLDING_COST = 0.10    # constant physical storage holding cost (EUR/MWh-month)
 demand_blocks_base = {
     "EU":   [(24.0, 120.0), (2.0, 88.0), (2.0, 78.0), (2.0, 68.0),
              (2.0,  57.0), (2.0, 47.0), (2.0, 36.0), (2.0, 26.0), (2.0, 15.0)],
+    # Asia (calibration v3): deepened price-elastic tail. Asia is the
+    # world's residual LNG sink -- Indian / SE-Asian price-sensitive buyers
+    # absorb diverted cargoes at $8-12/MMBtu (EUR 25-38). Without this tail
+    # the crisis-displaced US volumes could not clear in Asia and were
+    # dumped into the EU, crashing the model's EU price to EUR 19 while the
+    # observed crisis TTF was EUR 42-57 (set by EU-Asia cargo competition).
     "Asia": [(30.0, 105.0), (2.0, 80.0), (2.0, 68.0), (2.0, 58.0),
-             (2.0,  48.0), (2.0, 38.0), (2.0, 28.0), (2.0, 20.0)],
+             (2.0,  48.0), (3.0, 40.0), (4.0, 33.0), (4.0, 27.0), (4.0, 22.0)],
 }
 
 storage = {
@@ -269,19 +275,21 @@ def build_leader_mpcc(L, others_q):
         return sum(mdl.q[r, nid] for r in accessible) <= leader_cap_at_node(L, NODES[nid])
     m.lcap = pyo.Constraint(m.N, rule=_leader_cap)
 
-    # Long-term contract delivery floor (calibration v2): roughly 65-70% of
-    # global LNG trade moves under long-term offtake contracts with delivery
-    # obligations (GIIGNL Annual Report); only the residual is discretionary
-    # spot volume the leader can strategically withhold. Without this floor,
-    # Cournot leaders facing the steep calibrated demand curve withhold to
-    # the rationing ceiling, which contradicts observed prices. The floor
-    # binds total dispatch (not per-destination), so cross-basin arbitrage
-    # of the contracted volume remains a strategic choice. During a closure
-    # the blocked leader's capacity is zero, hence the floor is zero too.
-    CONTRACT_FLOOR = 0.70
+    # Per-leader delivery floor (calibration v3). The floor represents the
+    # share of capacity that is NOT strategically withholdable:
+    #   USA  0.90 -- US liquefaction ran at ~full utilisation through
+    #                2025-26; "USA" aggregates many competing private
+    #                exporters whose individual incentive is to dispatch,
+    #                so the unified-actor withholding power is small.
+    #   Gulf 0.85 -- QatarEnergy's portfolio is ~85% long-term contracted
+    #                (GIIGNL); only the residual is discretionary spot.
+    # The floor binds total dispatch (not per-destination), so cross-basin
+    # arbitrage of the contracted volume remains a strategic choice.
+    # During a closure the blocked leader's capacity is zero => floor zero.
+    CONTRACT_FLOOR = {"USA": 0.90, "Gulf": 0.85}
     def _leader_floor(mdl, nid):
         return (sum(mdl.q[r, nid] for r in accessible)
-                >= CONTRACT_FLOOR * leader_cap_at_node(L, NODES[nid]))
+                >= CONTRACT_FLOOR[L] * leader_cap_at_node(L, NODES[nid]))
     m.lcap_floor = pyo.Constraint(m.N, rule=_leader_floor)
 
     # Market balance per node (leader's own q + OTHER leader's q + fringe x = demand + storage flow)
