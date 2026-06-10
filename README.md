@@ -17,8 +17,8 @@ under a Bayesian scenario tree.
   LNG export volumes to Europe and Asia, anticipating the regional
   followers' market-clearing response.
 - **Two regional followers**: EU and Asia welfare-maximising market clearers
-  with inter-temporal storage subject to the EU 80% Nov-1 mandate
-  (Regulation 2017/1938) and a seasonal convenience yield on inventory.
+  with inter-temporal storage subject to the EU 90% Nov-1 mandate
+  (Regulation 2017/1938).
 - **Bayesian scenario tree**: closure status evolves as a two-state Markov
   chain whose transition rates are *unknown* to the agents — they form
   Beta-Bernoulli posterior beliefs from observation history, and the
@@ -83,13 +83,13 @@ realised-path equilibrium table at the end.
 
 | Parameter | Value | Source |
 |---|---|---|
-| EU demand block 1 | 22 bcm/mo at €120/MWh | Heating/petrochemical fuel-switching parity |
-| EU demand block 2 | 10 bcm/mo at €60/MWh | Industrial coal-switch parity (EUA-inclusive) |
-| EU demand block 3 | 7 bcm/mo at €35/MWh | Power-sector fuel switching |
+| EU demand block 1 | 28 bcm/mo at €80/MWh | Heating/petrochemical; sized for realistic winter drawdown (AGSI+) |
+| EU demand block 2 | 10 bcm/mo at €50/MWh | Industrial coal-switch parity (EUA-inclusive) |
+| EU demand block 3 | 7 bcm/mo at €25/MWh | Power-sector fuel switching |
 | EU winter seasonality | 1.65 | Eurostat 2018–23 typical |
 | EU storage cap | 100 bcm | GIE AGSI+ aggregate working gas |
-| EU Nov-1 mandate | 80% | Reg. 2017/1938 as amended 2022, flex provision |
-| Bayesian prior on closure rate | Beta(5, 100), mean 4.76%/mo | Post-2014 GPR-index regime |
+| EU Nov-1 mandate | 90% | Reg. 2017/1938 target |
+| Bayesian prior on closure rate | Beta(2, 40), mean 4.76%/mo | Post-2014 GPR-index regime; small effective sample for responsive updating |
 | Bayesian prior on reopening rate | Beta(2, 12), mean 14.3%/mo | Historical chokepoint duration record |
 | Damping for diagonalization | α = 0.4 | Cournot-type damping convention |
 
@@ -103,6 +103,8 @@ dispatch. After max_iter (or convergence), the final block shows:
 - Per-leader expected profit over the entire scenario tree
 - Realised-path equilibrium prices π_EU and π_Asia at each month
 - Per-leader monthly dispatch q_USA_EU, q_USA_Asia, q_Qatar_EU, q_Qatar_Asia
+- EU storage trajectory along the realised path
+- Computing time (per solve, per iteration, and total)
 
 The reported window is t = −5 (Sep 2025) to t = +12 (Feb 2027). Nodes
 t = +13 to +24 are computed but not displayed — they exist only to push the
@@ -133,6 +135,5 @@ and geopolitical tensions. Energy, 301, 131612.
 https://doi.org/10.1016/j.energy.2024.131612
 ```
 
-The strategic-equilibrium formulation, the Bayesian scenario tree, the
-EPEC reformulation, and the seasonal convenience-yield treatment are
-original contributions of this model.
+The strategic-equilibrium formulation, the Bayesian scenario tree, and the
+EPEC reformulation are original contributions of this model.
