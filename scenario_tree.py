@@ -77,8 +77,14 @@ def calendar_month(t):
 #   geopolitical risk during which agents have updated their beliefs about
 #   the current regime. Consistent with Caldara & Iacoviello (2022) GPR
 #   index findings of persistently elevated Middle East risk through 2025-26.
-ALPHA_C_PRIOR = 2.0
-BETA_C_PRIOR  = 40.0
+# Acute-tension prior: Beta(3, 30), mean 3/33 = 9.1%/month. Calibrated to
+# the immediate pre-closure regime of late 2025 / early 2026 (the closure
+# DID occur in March 2026), when the GPR index and shipping-insurance
+# premia signalled imminent-event risk well above the post-2014 average.
+# Small effective sample size (33 months) keeps the posterior responsive
+# to each new observation.
+ALPHA_C_PRIOR = 3.0
+BETA_C_PRIOR  = 30.0
 
 # Prior on p_R (monthly reopening rate when closed):
 #   Historical closure durations of major energy-supply chokepoint events

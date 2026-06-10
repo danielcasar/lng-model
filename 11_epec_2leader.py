@@ -1,33 +1,30 @@
 """
-Step 11: Two-leader stochastic Stackelberg EPEC -- USA + Qatar.
+Step 11: Two-leader stochastic Stackelberg EPEC -- USA + Gulf (Qatar+UAE).
 
-Extension of the single-leader MPCC (file 10) to a two-leader EPEC.
-USA and Qatar are the two strategic Stackelberg leaders; Australia and
-Russia remain in the fringe (Asia-locked, genuinely degenerate strategic
-decision). The EPEC across the two leaders is solved by Gauss-Seidel
-diagonalization with damped best-response.
+Two strategic Stackelberg leaders: the USA and a composite "Gulf" leader
+(Qatar + UAE, the Hormuz-transiting exporters, jointly ~20% of global LNG).
+Australia and Russia remain in the fringe (Asia-locked, genuinely
+degenerate strategic decision). The EPEC across the two leaders is solved
+by Gauss-Seidel diagonalization with damped best-response.
 
-Rationale: Qatar is the only non-US leader whose strategic decision is
-economically meaningful in this scenario because (i) it is the supplier
-being blocked, (ii) it has discretionary allocation between EU and Asia
-when the strait is open, and (iii) its pre-/post-crisis positioning is
-exactly the cross-basin reallocation that the 4-leader EPEC was originally
-designed to capture. By keeping only the two non-degenerate leaders the
-EPEC has just 2 strategic agents -- diagonalization between 2 leaders
-converges much faster than the 4-leader case (less oscillation, more
-distinct best-response correspondences) while preserving the multi-leader
-structural argument.
+Rationale: the Gulf composite is the only non-US actor whose strategic
+decision is economically meaningful in this scenario because (i) it is the
+supplier being blocked, (ii) it has discretionary allocation between EU
+and Asia when the strait is open, and (iii) its pre-/post-crisis
+positioning is exactly the cross-basin reallocation a multi-leader EPEC is
+designed to capture. Qatar and the UAE face identical blocking exposure
+(93% / 96% of their shipments transit Hormuz), so aggregating them is the
+natural coalition. With two leaders, diagonalization converges much faster
+than the 4-leader case while preserving the multi-leader structure.
 
 Implementation:
   - Each leader L solves its own MPCC with the other leader's q^{-L}
     held as a fixed parameter (read from the previous iteration).
-  - At each iteration we solve USA's MPCC, then Qatar's MPCC, then apply
-    a damped update q^{(i+1)} = alpha * q_best + (1-alpha) * q^{(i)}.
+  - Per iteration: solve USA's MPCC, then Gulf's MPCC, then apply a
+    damped update q^{(i+1)} = alpha * q_best + (1-alpha) * q^{(i)}.
   - Convergence declared when max |dq| < 0.5 bcm across leaders, regions
-    and tree nodes. Damping alpha = 0.4 (slightly more conservative than
-    the original 4-leader case to avoid oscillation).
-  - Each per-leader MPCC time-limited at 1800 s. Expected total: 5-8 h
-    for ~6-10 iterations.
+    and tree nodes. Damping alpha = 0.4.
+  - Wall time approx. 2 min on a 24-core server, ~60-90 min on a laptop.
 """
 
 import time
@@ -45,9 +42,18 @@ from scenario_tree import (
 
 EVENT = ld.EVENTS["hormuz_closure"]
 
-LEADERS        = ["USA", "Qatar"]
-LEADER_REGIONS = {"USA":   ["EU", "Asia"],
-                  "Qatar": ["EU", "Asia"]}
+# The second strategic leader is a COMPOSITE of the Hormuz-transiting Gulf
+# exporters: Qatar (93% of LNG shipments via Hormuz) and the UAE (96%),
+# jointly ~20% of global LNG exports (Zwickl-Bernhard et al. 2026). Both are
+# stranded identically under a closure, so they face the same strategic
+# situation; aggregating them closes the gap between the event definition
+# (which blocks all Hormuz-transiting capacity) and the strategic-actor set.
+# UAE capacity is represented by the "Other_Middle_East" entry in lng_data.
+LEADERS        = ["USA", "Gulf"]
+LEADER_REGIONS = {"USA":  ["EU", "Asia"],
+                  "Gulf": ["EU", "Asia"]}
+GULF_MEMBERS   = ["Qatar", "Other_Middle_East"]
+BLOCKED_LEADERS = {"Gulf"}    # stranded whenever the strait is closed
 
 # =============================================================================
 # FRINGE SUPPLIERS
@@ -93,19 +99,24 @@ fringe = {
 # LEADER COSTS AND CAPACITIES
 # =============================================================================
 
+# USA: costs and capacity straight from the data. Gulf composite: capacity
+# is Qatar + UAE (Other_Middle_East); delivered cost uses Qatar's BEP and
+# transport costs -- the capacity-weighted BEP differs by < $0.03/MMBtu
+# (UAE share ~4% of the composite), so Qatar's cost is used for both members.
 leader_cost = {
-    L: {r: ld.delivered_cost_eur_mwh(L, r) for r in LEADER_REGIONS[L]}
-    for L in LEADERS
+    "USA":  {r: ld.delivered_cost_eur_mwh("USA",   r) for r in LEADER_REGIONS["USA"]},
+    "Gulf": {r: ld.delivered_cost_eur_mwh("Qatar", r) for r in LEADER_REGIONS["Gulf"]},
 }
 _LEADER_CAP_BASE = {
-    L: ld.annual_bn_mmbtu_to_monthly_bcm(ld.LIQ_CAP_BN_MMBTU_YR[L])
-    for L in LEADERS
+    "USA":  ld.annual_bn_mmbtu_to_monthly_bcm(ld.LIQ_CAP_BN_MMBTU_YR["USA"]),
+    "Gulf": sum(ld.annual_bn_mmbtu_to_monthly_bcm(ld.LIQ_CAP_BN_MMBTU_YR[m])
+                for m in GULF_MEMBERS),
 }
 
 def leader_cap_at_node(L, node):
     """Monthly capacity for leader L at scenario-tree node n.
-    Zero if Strait is closed at node and L is among blocked suppliers."""
-    if (not node.closure_open) and L in EVENT["blocked_suppliers"]:
+    Zero if the Strait is closed at the node and L is Hormuz-stranded."""
+    if (not node.closure_open) and L in BLOCKED_LEADERS:
         return 0.0
     return _LEADER_CAP_BASE[L]
 
@@ -125,9 +136,20 @@ HOLDING_COST = 0.10    # constant physical storage holding cost (EUR/MWh-month)
 # These values are anchored to typical 2024-25 TTF (€32-50/MWh) and JKM
 # (€40-50/MWh) clearing levels rather than to the high marginal-utility tiers
 # of the previous calibration.
+# Demand represented as an 8-block staircase approximating a continuous
+# inverse-demand curve (steps of EUR 10-15/MWh). The previous 3-block grid
+# pinned equilibrium prices at one of only three WTP levels, which made the
+# continuous Bayesian storage premium (typically EUR 2-8/MWh) invisible
+# unless it happened to jump a whole tier. With the finer staircase, prices
+# can move quasi-continuously and the uncertainty premium becomes visible at
+# its true scale. Block volumes sized so that cumulative winter demand at
+# EUR 50-65/MWh roughly matches total available supply (pre-crisis), with
+# headroom up to EUR 100/MWh for scarcity episodes.
 demand_blocks_base = {
-    "EU":   [(28.0, 80.0), (10.0, 50.0), (7.0, 25.0)],
-    "Asia": [(28.0, 70.0), (10.0, 45.0), (8.0, 20.0)],
+    "EU":   [(10.0, 100.0), (8.0, 85.0), (8.0, 70.0), (6.0, 60.0),
+             (5.0,  50.0), (4.0, 40.0), (3.0, 30.0), (3.0, 20.0)],
+    "Asia": [(10.0,  90.0), (8.0, 75.0), (8.0, 62.0), (6.0, 52.0),
+             (5.0,  45.0), (4.0, 35.0), (3.0, 28.0), (3.0, 20.0)],
 }
 
 storage = {
@@ -443,10 +465,10 @@ def diagonalize(max_iter=8, tol=0.5, alpha=0.4):
 if __name__ == "__main__":
     t_script = time.time()
     print("=" * 90)
-    print("Two-leader stochastic Stackelberg EPEC (USA + Qatar)")
+    print("Two-leader stochastic Stackelberg EPEC (USA + Gulf[Qatar+UAE])")
     print(f"Event: {EVENT['name']}")
     print(f"Tree nodes: {len(NODE_IDS)}; realized path: {len(REALIZED_IDS)}")
-    print(f"Strategic leaders: {LEADERS}")
+    print(f"Strategic leaders: {LEADERS} (Gulf = Qatar + UAE composite)")
     print(f"Fringe (price-taking): Australia, Russia (Asia) + Norway/Algeria/Sakhalin pipelines")
     print("=" * 90, flush=True)
 
@@ -466,7 +488,7 @@ if __name__ == "__main__":
     # along the realized path (these are follower-side decisions inside the
     # leader's MPCC; we read them from the last USA solve).
     print("\nExtracting storage trajectory from final MPCC solve...", flush=True)
-    final_others = {r: q_eq["Qatar"][r] for r in REGIONS}
+    final_others = {r: q_eq["Gulf"][r] for r in REGIONS}
     final_m = build_leader_mpcc("USA", final_others)
     final_solver = pyo.SolverFactory("gurobi")
     final_solver.options["NonConvex"]  = 2
@@ -477,8 +499,9 @@ if __name__ == "__main__":
     s_eu = {nid: pyo.value(final_m.stock["EU", nid]) for nid in REALIZED_IDS}
 
     print("\nRealized-path equilibrium prices, dispatches, and EU storage:")
+    print("(Gulf = Qatar + UAE composite leader)")
     hdr = (f"{'t':>3} {'mo':>4} {'status':>8}  {'p_EU':>7} {'p_AS':>7}   "
-           f"{'USA_EU':>7} {'USA_AS':>7} {'QAT_EU':>7} {'QAT_AS':>7}  {'S_EU':>6}")
+           f"{'USA_EU':>7} {'USA_AS':>7} {'GLF_EU':>7} {'GLF_AS':>7}  {'S_EU':>6}")
     print(hdr)
     print("-" * len(hdr))
     for nid in REALIZED_IDS:
@@ -489,7 +512,7 @@ if __name__ == "__main__":
         pa = prices["Asia"][nid] if prices else float('nan')
         print(f"{n.t:>+3d} {mo:>4} {status:>8}  {pe:>7.2f} {pa:>7.2f}   "
               f"{q_eq['USA']['EU'][nid]:>7.2f} {q_eq['USA']['Asia'][nid]:>7.2f} "
-              f"{q_eq['Qatar']['EU'][nid]:>7.2f} {q_eq['Qatar']['Asia'][nid]:>7.2f}  "
+              f"{q_eq['Gulf']['EU'][nid]:>7.2f} {q_eq['Gulf']['Asia'][nid]:>7.2f}  "
               f"{s_eu[nid]:>6.1f}")
 
     total_min = (time.time() - t_script) / 60
