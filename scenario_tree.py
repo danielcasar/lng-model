@@ -132,20 +132,31 @@ class TreeNode:
 # TREE CONSTRUCTION
 # =============================================================================
 
-def build_tree(verbose=False):
-    """Build the scenario tree along the realized path.
+def realized_status(t):
+    """True if the strait is OPEN at month t on the realized path
+    (closed exactly during T_CLOSURE_START..T_CLOSURE_END)."""
+    return not (T_CLOSURE_START <= t <= T_CLOSURE_END)
 
-    The realized path traverses: OPEN through pre-closure, CLOSED at t=+1
-    through closure phase, OPEN at t=+7 through post-closure phase. At each
-    realized-path node we also instantiate the (lower-probability) counterfactual
-    child where the state would have flipped, to support the agents' expected-
-    value computations.
+
+def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
+                    verbose=False):
+    """Build the scenario tree from an arbitrary starting month and belief
+    state -- the workhorse for ROLLING-HORIZON re-solves.
+
+    The root carries the posterior counts as of t_start (already updated
+    with the observation at t_start). From there the tree walks the
+    realized status path to T_LAST, instantiating at every step the
+    counterfactual sibling (the branch where the closure state would have
+    flipped) so agents' conditional expectations are well-defined.
+
+    build_tree() (below) is the special case t_start = T_FIRST with prior
+    beliefs -- the full-horizon tree used by the one-shot model.
     """
     nodes = {}
     realized_ids = []
 
     def add_node(t, closure_open, parent_id, history, edge_prob,
-                 alpha_C, beta_C, alpha_R, beta_R):
+                 a_C, b_C, a_R, b_R):
         h_signature = "".join("O" if h[1] else "C" for h in history)
         node_id = f"t{t:+d}_{h_signature}"
         if node_id in nodes:
@@ -155,7 +166,7 @@ def build_tree(verbose=False):
             node_id=node_id, t=t, closure_open=closure_open,
             history=history, parent_id=parent_id,
             cum_prob=parent_cum * edge_prob,
-            alpha_C=alpha_C, beta_C=beta_C, alpha_R=alpha_R, beta_R=beta_R,
+            alpha_C=a_C, beta_C=b_C, alpha_R=a_R, beta_R=b_R,
             children=[],
         )
         nodes[node_id] = n
@@ -163,121 +174,58 @@ def build_tree(verbose=False):
             nodes[parent_id].children.append(node_id)
         return n
 
-    # -------------------------------------------------------------------------
-    # Root at t = T_FIRST = -5, status OPEN, prior beliefs only.
-    # -------------------------------------------------------------------------
-    root_history = ((T_FIRST, True),)
+    root_history = ((t_start, open_start),)
     root = TreeNode(
-        node_id="root", t=T_FIRST, closure_open=True,
+        node_id="root", t=t_start, closure_open=open_start,
         history=root_history, parent_id="", cum_prob=1.0,
-        alpha_C=ALPHA_C_PRIOR, beta_C=BETA_C_PRIOR,
-        alpha_R=ALPHA_R_PRIOR, beta_R=BETA_R_PRIOR,
+        alpha_C=alpha_C, beta_C=beta_C, alpha_R=alpha_R, beta_R=beta_R,
         children=[],
     )
     nodes["root"] = root
     realized_ids.append("root")
 
-    # -------------------------------------------------------------------------
-    # Walk the realized "pre-closure: stays OPEN" branch month by month.
-    # At each open-node, posterior mean of p_C gives the branching probability.
-    # -------------------------------------------------------------------------
     prev_id = "root"
-    for t in range(T_FIRST + 1, T_PRE_END + 1):
+    for t in range(t_start + 1, T_LAST + 1):
         parent = nodes[prev_id]
-        p_close = beta_mean(parent.alpha_C, parent.beta_C)
-        # Realized: stays OPEN -> beta_C posterior count += 1
-        new_hist_open = parent.history + ((t, True),)
-        n_open = add_node(t, True, prev_id, new_hist_open, 1.0 - p_close,
-                          parent.alpha_C, parent.beta_C + 1.0,
-                          parent.alpha_R, parent.beta_R)
-        # Counterfactual: closes -> alpha_C += 1
-        new_hist_closed = parent.history + ((t, False),)
-        add_node(t, False, prev_id, new_hist_closed, p_close,
-                 parent.alpha_C + 1.0, parent.beta_C,
-                 parent.alpha_R, parent.beta_R)
-        prev_id = n_open.node_id
-        realized_ids.append(prev_id)
+        if parent.closure_open:
+            # From OPEN: event = closure (rate p_C)
+            p_event = beta_mean(parent.alpha_C, parent.beta_C)
+            open_prob,  close_prob  = 1.0 - p_event, p_event
+            open_counts  = (parent.alpha_C,       parent.beta_C + 1.0,
+                            parent.alpha_R,       parent.beta_R)
+            close_counts = (parent.alpha_C + 1.0, parent.beta_C,
+                            parent.alpha_R,       parent.beta_R)
+        else:
+            # From CLOSED: event = reopening (rate p_R)
+            p_event = beta_mean(parent.alpha_R, parent.beta_R)
+            open_prob,  close_prob  = p_event, 1.0 - p_event
+            open_counts  = (parent.alpha_C, parent.beta_C,
+                            parent.alpha_R + 1.0, parent.beta_R)
+            close_counts = (parent.alpha_C, parent.beta_C,
+                            parent.alpha_R,       parent.beta_R + 1.0)
 
-    # -------------------------------------------------------------------------
-    # t = +1: closure observed. From the last pre-closure OPEN node, the
-    # realized branch is the (lower-probability) "closes" branch.
-    # -------------------------------------------------------------------------
-    parent = nodes[realized_ids[-1]]  # t=0 OPEN node
-    p_close = beta_mean(parent.alpha_C, parent.beta_C)
-    closure_history = parent.history + ((T_CLOSURE_START, False),)
-    closure_node = add_node(T_CLOSURE_START, False, parent.node_id,
-                            closure_history, p_close,
-                            parent.alpha_C + 1.0, parent.beta_C,
-                            parent.alpha_R, parent.beta_R)
-    # Counterfactual at t=+1: closure did NOT happen (in fact it did)
-    no_close_hist = parent.history + ((T_CLOSURE_START, True),)
-    add_node(T_CLOSURE_START, True, parent.node_id, no_close_hist, 1.0 - p_close,
-             parent.alpha_C, parent.beta_C + 1.0,
-             parent.alpha_R, parent.beta_R)
-    realized_ids.append(closure_node.node_id)
+        n_open  = add_node(t, True,  prev_id, parent.history + ((t, True),),
+                           open_prob,  *open_counts)
+        n_close = add_node(t, False, prev_id, parent.history + ((t, False),),
+                           close_prob, *close_counts)
 
-    # -------------------------------------------------------------------------
-    # Walk the realized "closure: stays CLOSED" branch through t = +6.
-    # At each closed-node, posterior mean of p_R gives the branching prob.
-    # -------------------------------------------------------------------------
-    prev_id = closure_node.node_id
-    for t in range(T_CLOSURE_START + 1, T_CLOSURE_END + 1):
-        parent = nodes[prev_id]
-        p_reopen = beta_mean(parent.alpha_R, parent.beta_R)
-        # Realized: stays CLOSED -> beta_R += 1
-        new_hist_closed = parent.history + ((t, False),)
-        n_closed = add_node(t, False, prev_id, new_hist_closed, 1.0 - p_reopen,
-                            parent.alpha_C, parent.beta_C,
-                            parent.alpha_R, parent.beta_R + 1.0)
-        # Counterfactual: reopens
-        new_hist_open = parent.history + ((t, True),)
-        add_node(t, True, prev_id, new_hist_open, p_reopen,
-                 parent.alpha_C, parent.beta_C,
-                 parent.alpha_R + 1.0, parent.beta_R)
-        prev_id = n_closed.node_id
-        realized_ids.append(prev_id)
-
-    # -------------------------------------------------------------------------
-    # t = +7: realized REOPENING. From the last CLOSED node (t=+6), realized
-    # branch is the "reopens" outcome.
-    # -------------------------------------------------------------------------
-    parent = nodes[realized_ids[-1]]  # t=+6 CLOSED node
-    p_reopen = beta_mean(parent.alpha_R, parent.beta_R)
-    reopen_hist = parent.history + ((T_POST_START, True),)
-    reopen_node = add_node(T_POST_START, True, parent.node_id, reopen_hist,
-                           p_reopen,
-                           parent.alpha_C, parent.beta_C,
-                           parent.alpha_R + 1.0, parent.beta_R)
-    # Counterfactual: closure extends past +6
-    stays_closed_hist = parent.history + ((T_POST_START, False),)
-    add_node(T_POST_START, False, parent.node_id, stays_closed_hist, 1.0 - p_reopen,
-             parent.alpha_C, parent.beta_C,
-             parent.alpha_R, parent.beta_R + 1.0)
-    realized_ids.append(reopen_node.node_id)
-
-    # -------------------------------------------------------------------------
-    # Walk realized "post-closure: stays OPEN" branch through t = +12.
-    # -------------------------------------------------------------------------
-    prev_id = reopen_node.node_id
-    for t in range(T_POST_START + 1, T_LAST + 1):
-        parent = nodes[prev_id]
-        p_close = beta_mean(parent.alpha_C, parent.beta_C)
-        new_hist_open = parent.history + ((t, True),)
-        n_open = add_node(t, True, prev_id, new_hist_open, 1.0 - p_close,
-                          parent.alpha_C, parent.beta_C + 1.0,
-                          parent.alpha_R, parent.beta_R)
-        new_hist_closed = parent.history + ((t, False),)
-        add_node(t, False, prev_id, new_hist_closed, p_close,
-                 parent.alpha_C + 1.0, parent.beta_C,
-                 parent.alpha_R, parent.beta_R)
-        prev_id = n_open.node_id
+        nxt = n_open if realized_status(t) else n_close
+        prev_id = nxt.node_id
         realized_ids.append(prev_id)
 
     if verbose:
-        print(f"Built tree with {len(nodes)} nodes, {len(realized_ids)} on realized path")
+        print(f"Built tree from t={t_start:+d} with {len(nodes)} nodes, "
+              f"{len(realized_ids)} on realized path")
         print(f"Realized cumulative probability: {nodes[realized_ids[-1]].cum_prob:.6g}")
 
     return nodes, realized_ids
+
+
+def build_tree(verbose=False):
+    """Full-horizon tree from T_FIRST with prior beliefs (one-shot model)."""
+    return build_tree_from(T_FIRST, True,
+                           ALPHA_C_PRIOR, BETA_C_PRIOR,
+                           ALPHA_R_PRIOR, BETA_R_PRIOR, verbose=verbose)
 
 # =============================================================================
 # DIAGNOSTICS

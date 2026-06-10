@@ -233,15 +233,35 @@ def wtp(r, k):      return demand_blocks_base[r][k][1]
 # BUILD SCENARIO TREE (shared across both leaders)
 # =============================================================================
 
-NODES, REALIZED_IDS = build_tree()
-NODE_IDS = list(NODES.keys())
 REGIONS  = ("EU", "Asia")
 S_by_r   = {r: list(fringe[r].keys()) for r in REGIONS}
 K_by_r   = {r: list(range(len(demand_blocks_base[r]))) for r in REGIONS}
+EU_NOV_MIN = 0.90 * storage["EU"]["S_max"]    # Reg 2017/1938: 90% Nov-1 target
 
-NOV_TARGETS_EU_NODES = [nid for nid in REALIZED_IDS if calendar_month(NODES[nid].t) == 10]
-EU_NOV_MIN           = 0.90 * storage["EU"]["S_max"]    # Reg 2017/1938: 90% Nov-1 target
-TERMINAL_NODE_IDS    = [nid for nid, n in NODES.items() if not n.children and n.t == T_LAST]
+def make_ctx(nodes, realized_ids, s_init):
+    """Bundle a scenario tree + initial storage state into the context dict
+    consumed by the MPCC builder. The rolling-horizon driver (file 12)
+    creates a fresh ctx for every monthly re-solve; the one-shot model uses
+    DEFAULT_CTX below."""
+    return {
+        "NODES":        nodes,
+        "NODE_IDS":     list(nodes.keys()),
+        "REALIZED_IDS": realized_ids,
+        "NOV_NODES":    [nid for nid in realized_ids
+                         if calendar_month(nodes[nid].t) == 10],
+        "TERMINAL_IDS": [nid for nid, n in nodes.items()
+                         if not n.children and n.t == T_LAST],
+        "S_INIT":       dict(s_init),
+    }
+
+_NODES_FULL, _REALIZED_FULL = build_tree()
+DEFAULT_CTX = make_ctx(_NODES_FULL, _REALIZED_FULL,
+                       {r: storage[r]["S_init"] for r in REGIONS})
+
+# Backwards-compatible module-level aliases (used by __main__ prints)
+NODES        = DEFAULT_CTX["NODES"]
+NODE_IDS     = DEFAULT_CTX["NODE_IDS"]
+REALIZED_IDS = DEFAULT_CTX["REALIZED_IDS"]
 
 # =============================================================================
 # PER-LEADER MPCC BUILDER (one of two)
@@ -249,11 +269,19 @@ TERMINAL_NODE_IDS    = [nid for nid, n in NODES.items() if not n.children and n.
 
 M_X, M_D, M_PI, M_DUE, M_STOCK = 60.0, 60.0, 600.0, 600.0, 150.0
 
-def build_leader_mpcc(L, others_q):
+def build_leader_mpcc(L, others_q, ctx=None):
     """Build leader L's MPCC with the other leader's q held fixed.
 
     others_q[r][nid] = the OTHER leader's supply to region r at node nid.
+    ctx = tree context from make_ctx(); defaults to the full-horizon tree.
     """
+    ctx = ctx if ctx is not None else DEFAULT_CTX
+    NODES                = ctx["NODES"]
+    NODE_IDS             = ctx["NODE_IDS"]
+    NOV_TARGETS_EU_NODES = ctx["NOV_NODES"]
+    TERMINAL_NODE_IDS    = ctx["TERMINAL_IDS"]
+    S_INIT               = ctx["S_INIT"]
+
     accessible = LEADER_REGIONS[L]
 
     m = pyo.ConcreteModel(f"MPCC_{L}_stochastic")
@@ -327,7 +355,7 @@ def build_leader_mpcc(L, others_q):
     def _storage_balance(mdl, r, nid):
         node = NODES[nid]
         if node.parent_id == "":
-            prev = storage[r]["S_init"]
+            prev = S_INIT[r]
         else:
             prev = mdl.stock[r, node.parent_id]
         return mdl.stock[r, nid] == prev + mdl.flow[r, nid]
@@ -460,7 +488,9 @@ def build_leader_mpcc(L, others_q):
 # DIAGONALIZATION
 # =============================================================================
 
-def init_quantities():
+def init_quantities(ctx=None):
+    ctx = ctx if ctx is not None else DEFAULT_CTX
+    NODES, NODE_IDS = ctx["NODES"], ctx["NODE_IDS"]
     q = {}
     for L in LEADERS:
         regs = LEADER_REGIONS[L]
@@ -473,14 +503,16 @@ def init_quantities():
                 q[L][r][nid] = share
     return q
 
-def solve_leader(L, others_q, time_limit=180, mip_gap=3e-2):
+def solve_leader(L, others_q, ctx=None, time_limit=180, mip_gap=3e-2):
     # During diagonalization iterations a loose 3% gap is sufficient: the
     # damped update only uses the best response directionally, and the
     # equilibrium is refined across iterations anyway. The final storage-
     # extraction solve uses a tighter gap (see __main__). With the 17-block
     # calibrated demand staircase the MIQCP has ~2,000 demand-side binaries
     # (3x the coarse grid), so per-solve effort is materially higher.
-    m = build_leader_mpcc(L, others_q)
+    ctx = ctx if ctx is not None else DEFAULT_CTX
+    NODE_IDS = ctx["NODE_IDS"]
+    m = build_leader_mpcc(L, others_q, ctx=ctx)
     solver = pyo.SolverFactory("gurobi")
     solver.options["NonConvex"]  = 2
     solver.options["MIPGap"]     = mip_gap
@@ -490,35 +522,44 @@ def solve_leader(L, others_q, time_limit=180, mip_gap=3e-2):
     try:
         m.solutions.load_from(results)
     except Exception:
-        return None, None, None
+        return None, None, None, None
     try:
         q_new  = {r: {nid: max(0.0, pyo.value(m.q[r, nid])) for nid in NODE_IDS} for r in REGIONS}
         prices = {r: {nid: pyo.value(m.pi[r, nid]) for nid in NODE_IDS} for r in REGIONS}
+        stocks = {r: {nid: pyo.value(m.stock[r, nid]) for nid in NODE_IDS} for r in REGIONS}
         profit = pyo.value(m.obj)
     except Exception:
-        return None, None, None
-    return q_new, prices, profit
+        return None, None, None, None
+    return q_new, prices, profit, stocks
 
-def max_change(q_old, q_new):
+def max_change(q_old, q_new, ctx=None):
+    ctx = ctx if ctx is not None else DEFAULT_CTX
+    NODE_IDS = ctx["NODE_IDS"]
     return max(abs(q_old[L][r][nid] - q_new[L][r][nid])
                for L in LEADERS for r in REGIONS for nid in NODE_IDS)
 
-def diagonalize(max_iter=8, tol=0.5, alpha=0.4):
-    q = init_quantities()
+def diagonalize(ctx=None, max_iter=8, tol=0.5, alpha=0.4,
+                time_limit=180, verbose=True):
+    ctx = ctx if ctx is not None else DEFAULT_CTX
+    NODE_IDS, REALIZED_IDS = ctx["NODE_IDS"], ctx["REALIZED_IDS"]
+    q = init_quantities(ctx)
     last_prices  = None
     last_profits = {}
+    last_stocks  = None
     t_start = time.time()
 
     for it in range(max_iter):
         t_iter = time.time()
-        print(f"\n--- Iteration {it+1} ---", flush=True)
+        if verbose:
+            print(f"\n--- Iteration {it+1} ---", flush=True)
         q_prev = {L: {r: dict(q[L][r]) for r in REGIONS} for L in LEADERS}
 
         for L in LEADERS:
             t_solve = time.time()
             other_L = [Lp for Lp in LEADERS if Lp != L][0]
             others = {r: q[other_L][r] for r in REGIONS}
-            q_br, prices, profit = solve_leader(L, others)
+            q_br, prices, profit, stocks = solve_leader(L, others, ctx=ctx,
+                                                        time_limit=time_limit)
             solve_secs = time.time() - t_solve
             if q_br is None:
                 print(f"  {L:10s}  SOLVER FAILED, keeping previous q "
@@ -529,25 +570,30 @@ def diagonalize(max_iter=8, tol=0.5, alpha=0.4):
                     q[L][r][nid] = alpha * q_br[r][nid] + (1 - alpha) * q[L][r][nid]
             last_prices    = prices
             last_profits[L] = profit
-            avg_eu = sum(q[L]["EU"][nid] for nid in REALIZED_IDS) / len(REALIZED_IDS)
-            avg_as = sum(q[L]["Asia"][nid] for nid in REALIZED_IDS) / len(REALIZED_IDS)
-            print(f"  {L:10s}  E[profit]={profit:10.1f}  "
-                  f"q_EU_realized={avg_eu:5.2f}  q_AS_realized={avg_as:5.2f}  "
-                  f"[solve {solve_secs:.0f}s]", flush=True)
+            last_stocks    = stocks
+            if verbose:
+                avg_eu = sum(q[L]["EU"][nid] for nid in REALIZED_IDS) / len(REALIZED_IDS)
+                avg_as = sum(q[L]["Asia"][nid] for nid in REALIZED_IDS) / len(REALIZED_IDS)
+                print(f"  {L:10s}  E[profit]={profit:10.1f}  "
+                      f"q_EU_realized={avg_eu:5.2f}  q_AS_realized={avg_as:5.2f}  "
+                      f"[solve {solve_secs:.0f}s]", flush=True)
 
-        delta = max_change(q_prev, q)
+        delta = max_change(q_prev, q, ctx)
         iter_secs  = time.time() - t_iter
         total_secs = time.time() - t_start
-        print(f"  max |dq| = {delta:.3f}   "
-              f"[iteration {iter_secs:.0f}s, total {total_secs/60:.1f}min]", flush=True)
+        if verbose:
+            print(f"  max |dq| = {delta:.3f}   "
+                  f"[iteration {iter_secs:.0f}s, total {total_secs/60:.1f}min]", flush=True)
         if delta < tol:
-            print(f"\n*** Converged after {it+1} iterations (tol={tol}). "
-                  f"Total wall time: {(time.time()-t_start)/60:.1f} min ***", flush=True)
-            return q, last_prices, last_profits, it + 1
+            if verbose:
+                print(f"\n*** Converged after {it+1} iterations (tol={tol}). "
+                      f"Total wall time: {(time.time()-t_start)/60:.1f} min ***", flush=True)
+            return q, last_prices, last_profits, it + 1, last_stocks
 
-    print(f"\n!!! No convergence after {max_iter} iterations (last dq={delta:.3f}). "
-          f"Total wall time: {(time.time()-t_start)/60:.1f} min", flush=True)
-    return q, last_prices, last_profits, max_iter
+    if verbose:
+        print(f"\n!!! No convergence after {max_iter} iterations (last dq={delta:.3f}). "
+              f"Total wall time: {(time.time()-t_start)/60:.1f} min", flush=True)
+    return q, last_prices, last_profits, max_iter, last_stocks
 
 # =============================================================================
 # RUN
@@ -563,7 +609,7 @@ if __name__ == "__main__":
     print(f"Fringe (price-taking): Australia, Russia (Asia) + Norway/Algeria/Sakhalin pipelines")
     print("=" * 90, flush=True)
 
-    q_eq, prices, profits, iters = diagonalize()
+    q_eq, prices, profits, iters, _ = diagonalize()
 
     MONTH_NAMES = ["", "Jan","Feb","Mar","Apr","May","Jun",
                    "Jul","Aug","Sep","Oct","Nov","Dec"]
