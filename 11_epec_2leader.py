@@ -399,11 +399,17 @@ def init_quantities():
                 q[L][r][nid] = share
     return q
 
-def solve_leader(L, others_q, time_limit=300):
+def solve_leader(L, others_q, time_limit=180, mip_gap=3e-2):
+    # During diagonalization iterations a loose 3% gap is sufficient: the
+    # damped update only uses the best response directionally, and the
+    # equilibrium is refined across iterations anyway. The final storage-
+    # extraction solve uses a tighter gap (see __main__). With the 17-block
+    # calibrated demand staircase the MIQCP has ~2,000 demand-side binaries
+    # (3x the coarse grid), so per-solve effort is materially higher.
     m = build_leader_mpcc(L, others_q)
     solver = pyo.SolverFactory("gurobi")
     solver.options["NonConvex"]  = 2
-    solver.options["MIPGap"]     = 1e-2
+    solver.options["MIPGap"]     = mip_gap
     solver.options["TimeLimit"]  = time_limit
     solver.options["OutputFlag"] = 0
     results = solver.solve(m, tee=False, load_solutions=False)
