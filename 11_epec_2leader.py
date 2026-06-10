@@ -30,6 +30,7 @@ Implementation:
     for ~6-10 iterations.
 """
 
+import time
 import pyomo.environ as pyo
 import lng_data as ld
 from scenario_tree import (
@@ -125,8 +126,8 @@ HOLDING_COST = 0.10    # constant physical storage holding cost (EUR/MWh-month)
 # (€40-50/MWh) clearing levels rather than to the high marginal-utility tiers
 # of the previous calibration.
 demand_blocks_base = {
-    "EU":   [(22.0, 120.0), (10.0, 60.0), (7.0, 35.0)],
-    "Asia": [(22.0, 110.0), (10.0, 55.0), (8.0, 22.0)],
+    "EU":   [(28.0, 80.0), (10.0, 50.0), (7.0, 25.0)],
+    "Asia": [(28.0, 70.0), (10.0, 45.0), (8.0, 20.0)],
 }
 
 storage = {
@@ -393,17 +394,22 @@ def diagonalize(max_iter=8, tol=0.5, alpha=0.4):
     q = init_quantities()
     last_prices  = None
     last_profits = {}
+    t_start = time.time()
 
     for it in range(max_iter):
+        t_iter = time.time()
         print(f"\n--- Iteration {it+1} ---", flush=True)
         q_prev = {L: {r: dict(q[L][r]) for r in REGIONS} for L in LEADERS}
 
         for L in LEADERS:
+            t_solve = time.time()
             other_L = [Lp for Lp in LEADERS if Lp != L][0]
             others = {r: q[other_L][r] for r in REGIONS}
             q_br, prices, profit = solve_leader(L, others)
+            solve_secs = time.time() - t_solve
             if q_br is None:
-                print(f"  {L:10s}  SOLVER FAILED, keeping previous q", flush=True)
+                print(f"  {L:10s}  SOLVER FAILED, keeping previous q "
+                      f"[{solve_secs:.0f}s]", flush=True)
                 continue
             for r in REGIONS:
                 for nid in NODE_IDS:
@@ -413,15 +419,21 @@ def diagonalize(max_iter=8, tol=0.5, alpha=0.4):
             avg_eu = sum(q[L]["EU"][nid] for nid in REALIZED_IDS) / len(REALIZED_IDS)
             avg_as = sum(q[L]["Asia"][nid] for nid in REALIZED_IDS) / len(REALIZED_IDS)
             print(f"  {L:10s}  E[profit]={profit:10.1f}  "
-                  f"q_EU_realized={avg_eu:5.2f}  q_AS_realized={avg_as:5.2f}", flush=True)
+                  f"q_EU_realized={avg_eu:5.2f}  q_AS_realized={avg_as:5.2f}  "
+                  f"[solve {solve_secs:.0f}s]", flush=True)
 
         delta = max_change(q_prev, q)
-        print(f"  max |dq| = {delta:.3f}", flush=True)
+        iter_secs  = time.time() - t_iter
+        total_secs = time.time() - t_start
+        print(f"  max |dq| = {delta:.3f}   "
+              f"[iteration {iter_secs:.0f}s, total {total_secs/60:.1f}min]", flush=True)
         if delta < tol:
-            print(f"\n*** Converged after {it+1} iterations (tol={tol}). ***", flush=True)
+            print(f"\n*** Converged after {it+1} iterations (tol={tol}). "
+                  f"Total wall time: {(time.time()-t_start)/60:.1f} min ***", flush=True)
             return q, last_prices, last_profits, it + 1
 
-    print(f"\n!!! No convergence after {max_iter} iterations (last dq={delta:.3f}).", flush=True)
+    print(f"\n!!! No convergence after {max_iter} iterations (last dq={delta:.3f}). "
+          f"Total wall time: {(time.time()-t_start)/60:.1f} min", flush=True)
     return q, last_prices, last_profits, max_iter
 
 # =============================================================================
@@ -429,12 +441,13 @@ def diagonalize(max_iter=8, tol=0.5, alpha=0.4):
 # =============================================================================
 
 if __name__ == "__main__":
+    t_script = time.time()
     print("=" * 90)
     print("Two-leader stochastic Stackelberg EPEC (USA + Qatar)")
     print(f"Event: {EVENT['name']}")
     print(f"Tree nodes: {len(NODE_IDS)}; realized path: {len(REALIZED_IDS)}")
     print(f"Strategic leaders: {LEADERS}")
-    print(f"Fringe Asia (price-taking, H1): Australia, Russia + smaller fringe")
+    print(f"Fringe (price-taking): Australia, Russia (Asia) + Norway/Algeria/Sakhalin pipelines")
     print("=" * 90, flush=True)
 
     q_eq, prices, profits, iters = diagonalize()
@@ -449,9 +462,23 @@ if __name__ == "__main__":
     for L in LEADERS:
         print(f"  {L:10s}  {profits.get(L, float('nan')):10.1f}")
 
-    print("\nRealized-path equilibrium prices and dispatches:")
+    # Re-solve one final pass of each leader's MPCC to extract storage levels
+    # along the realized path (these are follower-side decisions inside the
+    # leader's MPCC; we read them from the last USA solve).
+    print("\nExtracting storage trajectory from final MPCC solve...", flush=True)
+    final_others = {r: q_eq["Qatar"][r] for r in REGIONS}
+    final_m = build_leader_mpcc("USA", final_others)
+    final_solver = pyo.SolverFactory("gurobi")
+    final_solver.options["NonConvex"]  = 2
+    final_solver.options["MIPGap"]     = 1e-2
+    final_solver.options["TimeLimit"]  = 300
+    final_solver.options["OutputFlag"] = 0
+    final_solver.solve(final_m, tee=False)
+    s_eu = {nid: pyo.value(final_m.stock["EU", nid]) for nid in REALIZED_IDS}
+
+    print("\nRealized-path equilibrium prices, dispatches, and EU storage:")
     hdr = (f"{'t':>3} {'mo':>4} {'status':>8}  {'p_EU':>7} {'p_AS':>7}   "
-           f"{'USA_EU':>7} {'USA_AS':>7} {'QAT_EU':>7} {'QAT_AS':>7}")
+           f"{'USA_EU':>7} {'USA_AS':>7} {'QAT_EU':>7} {'QAT_AS':>7}  {'S_EU':>6}")
     print(hdr)
     print("-" * len(hdr))
     for nid in REALIZED_IDS:
@@ -462,4 +489,9 @@ if __name__ == "__main__":
         pa = prices["Asia"][nid] if prices else float('nan')
         print(f"{n.t:>+3d} {mo:>4} {status:>8}  {pe:>7.2f} {pa:>7.2f}   "
               f"{q_eq['USA']['EU'][nid]:>7.2f} {q_eq['USA']['Asia'][nid]:>7.2f} "
-              f"{q_eq['Qatar']['EU'][nid]:>7.2f} {q_eq['Qatar']['Asia'][nid]:>7.2f}")
+              f"{q_eq['Qatar']['EU'][nid]:>7.2f} {q_eq['Qatar']['Asia'][nid]:>7.2f}  "
+              f"{s_eu[nid]:>6.1f}")
+
+    total_min = (time.time() - t_script) / 60
+    print(f"\nTotal computing time: {total_min:.1f} min "
+          f"({iters} diagonalization iterations + final storage extraction)", flush=True)
