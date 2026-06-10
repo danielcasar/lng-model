@@ -180,6 +180,26 @@ storage = {
     "Asia": {"S_max":  20.0, "S_init": 10.0, "S_term": 10.0},
 }
 
+# Observed EU storage cycling envelope (calibration v4): maximum observed
+# end-of-month fill fraction over ~10 years of GIE AGSI+ data. EU storage
+# has NEVER stayed near-full through late winter in any observed year --
+# shippers sell winter volumes forward and contracted cycling forces
+# seasonal release. Without this envelope the MPCC selects a hoarding
+# equilibrium (storage held at ~100% all winter sustaining high prices,
+# dumped only at the terminal nodes outside the reported window) because
+# among the degenerate follower-optimal storage paths the single-level
+# reformulation picks the leader-preferred one.
+EU_MAX_FILL = {   # calendar month -> max end-of-month fill fraction
+    1: 0.80, 2: 0.70, 3: 0.62, 4: 0.68, 5: 0.78, 6: 0.88,
+    7: 0.94, 8: 0.98, 9: 1.00, 10: 1.00, 11: 1.00, 12: 0.92,
+}
+
+# Physical injection / withdrawal deliverability limits (GIE aggregate
+# technical capacity, EU-wide): prevents pathological storage jumps such
+# as a 70 bcm refill within two months.
+EU_MAX_INJECT_BCM   = 12.0   # per month
+EU_MAX_WITHDRAW_BCM = 25.0   # per month
+
 # Month-specific EU demand factors derived from observed EU monthly gas
 # demand 2023-2025 (eu_demand_monthly.csv), normalised to the annual mean
 # (~28.2 bcm/month). Replaces the previous flat winter/summer factors:
@@ -315,6 +335,26 @@ def build_leader_mpcc(L, others_q):
 
     m.storage_cap = pyo.Constraint(m.R, m.N,
         rule=lambda mdl, r, nid: mdl.stock[r, nid] <= storage[r]["S_max"])
+
+    # Observed cycling envelope (EU only): end-of-month fill may not exceed
+    # the historical maximum for that calendar month (AGSI+, see above).
+    def _cycling_envelope(mdl, r, nid):
+        if r != "EU": return pyo.Constraint.Skip
+        frac = EU_MAX_FILL[calendar_month(NODES[nid].t)]
+        if frac >= 1.0: return pyo.Constraint.Skip
+        return mdl.stock[r, nid] <= frac * storage[r]["S_max"]
+    m.cycling_env = pyo.Constraint(m.R, m.N, rule=_cycling_envelope)
+
+    # Physical deliverability limits (EU only): injection and withdrawal
+    # rates bounded by GIE aggregate technical capacity.
+    def _flow_limits_up(mdl, r, nid):
+        if r != "EU": return pyo.Constraint.Skip
+        return mdl.flow[r, nid] <= EU_MAX_INJECT_BCM
+    m.flow_up = pyo.Constraint(m.R, m.N, rule=_flow_limits_up)
+    def _flow_limits_dn(mdl, r, nid):
+        if r != "EU": return pyo.Constraint.Skip
+        return mdl.flow[r, nid] >= -EU_MAX_WITHDRAW_BCM
+    m.flow_dn = pyo.Constraint(m.R, m.N, rule=_flow_limits_dn)
 
     def _terminal(mdl, r, nid):
         if nid not in TERMINAL_NODE_IDS: return pyo.Constraint.Skip

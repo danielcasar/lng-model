@@ -77,14 +77,17 @@ def calendar_month(t):
 #   geopolitical risk during which agents have updated their beliefs about
 #   the current regime. Consistent with Caldara & Iacoviello (2022) GPR
 #   index findings of persistently elevated Middle East risk through 2025-26.
-# Acute-tension prior: Beta(3, 30), mean 3/33 = 9.1%/month. Calibrated to
-# the immediate pre-closure regime of late 2025 / early 2026 (the closure
-# DID occur in March 2026), when the GPR index and shipping-insurance
-# premia signalled imminent-event risk well above the post-2014 average.
-# Small effective sample size (33 months) keeps the posterior responsive
-# to each new observation.
-ALPHA_C_PRIOR = 3.0
-BETA_C_PRIOR  = 30.0
+# Prior on the closure-arrival rate: Beta(2, 40), mean 2/42 = 4.8%/month.
+# CALIBRATED TO THE OBSERVED PRE-CRISIS PREMIUM: TTF was flat at ~37
+# EUR/MWh through Jan-Feb 2026 -- the market priced essentially no
+# imminent-closure premium and was genuinely surprised on 2 March (TTF
+# +55% in two trading days, Kpler). A higher prior (9%/month was tested)
+# generates a winter precautionary premium far above the observed level.
+# Small effective sample size (42 months) keeps the posterior responsive
+# to each new observation, which matters for the crisis-period dynamics
+# (ceasefire dip, re-escalation) carried by the reopening-rate posterior.
+ALPHA_C_PRIOR = 2.0
+BETA_C_PRIOR  = 40.0
 
 # Prior on p_R (monthly reopening rate when closed):
 #   Historical closure durations of major energy-supply chokepoint events
