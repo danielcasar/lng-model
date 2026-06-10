@@ -72,8 +72,19 @@ SPOT_TRADABLE = 1.00    # H1 removed -- full nameplate spot-tradable
 # folded out to clean the model down to the four-actor structure (US + Qatar
 # strategic, Australia + Russia fringe) covering >70% of global LNG capacity
 # per Bruegel and IEA gas-market reports.
-_EU_ACCESS = {}          # no LNG fringe to EU; Norway+Algeria pipe still served
+# Small price-taking LNG fringe RESTORED (calibration v2): the first
+# calibration run showed that without a competitive fringe, the two Cournot
+# leaders facing the steep (inelastic) demand curve withhold supply until
+# prices hit the essential-block ceiling permanently (EU model 119 vs
+# observed 33-38). The real market is disciplined by many small price-taking
+# exporters (~17 bcm/month jointly); restoring them caps the strategic
+# markup at realistic levels.
+_EU_ACCESS = {
+    "Algeria": 0.5, "Nigeria": 0.5, "Trinidad": 0.6,
+    "Other_Americas": 0.3, "Other_Africa": 0.5,
+}
 _ASIA_ACCESS = {
+    "Indonesia": 0.7, "Malaysia": 0.7, "Oman": 0.7, "Other_Asia_Pacific": 0.8,
     "Australia": 1.0,    # demoted leader, kept as Asian price-taking fringe
     "Russia":    1.0,    # demoted leader, kept as Asian price-taking fringe
 }
@@ -257,6 +268,21 @@ def build_leader_mpcc(L, others_q):
     def _leader_cap(mdl, nid):
         return sum(mdl.q[r, nid] for r in accessible) <= leader_cap_at_node(L, NODES[nid])
     m.lcap = pyo.Constraint(m.N, rule=_leader_cap)
+
+    # Long-term contract delivery floor (calibration v2): roughly 65-70% of
+    # global LNG trade moves under long-term offtake contracts with delivery
+    # obligations (GIIGNL Annual Report); only the residual is discretionary
+    # spot volume the leader can strategically withhold. Without this floor,
+    # Cournot leaders facing the steep calibrated demand curve withhold to
+    # the rationing ceiling, which contradicts observed prices. The floor
+    # binds total dispatch (not per-destination), so cross-basin arbitrage
+    # of the contracted volume remains a strategic choice. During a closure
+    # the blocked leader's capacity is zero, hence the floor is zero too.
+    CONTRACT_FLOOR = 0.70
+    def _leader_floor(mdl, nid):
+        return (sum(mdl.q[r, nid] for r in accessible)
+                >= CONTRACT_FLOOR * leader_cap_at_node(L, NODES[nid]))
+    m.lcap_floor = pyo.Constraint(m.N, rule=_leader_floor)
 
     # Market balance per node (leader's own q + OTHER leader's q + fringe x = demand + storage flow)
     def _balance(mdl, r, nid):
