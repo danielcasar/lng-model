@@ -136,20 +136,26 @@ HOLDING_COST = 0.10    # constant physical storage holding cost (EUR/MWh-month)
 # These values are anchored to typical 2024-25 TTF (€32-50/MWh) and JKM
 # (€40-50/MWh) clearing levels rather than to the high marginal-utility tiers
 # of the previous calibration.
-# Demand represented as an 8-block staircase approximating a continuous
-# inverse-demand curve (steps of EUR 10-15/MWh). The previous 3-block grid
-# pinned equilibrium prices at one of only three WTP levels, which made the
-# continuous Bayesian storage premium (typically EUR 2-8/MWh) invisible
-# unless it happened to jump a whole tier. With the finer staircase, prices
-# can move quasi-continuously and the uncertainty premium becomes visible at
-# its true scale. Block volumes sized so that cumulative winter demand at
-# EUR 50-65/MWh roughly matches total available supply (pre-crisis), with
-# headroom up to EUR 100/MWh for scarcity episodes.
+# Demand staircase CALIBRATED TO OBSERVED DATA (see calibration_targets.csv
+# and eu_demand_monthly.csv):
+#
+# EU: the observed (quantity, price) pairs straddling the closure imply a
+# steep inverse demand: (Jan26: 49 bcm at EUR 37) vs (Mar26: 35 bcm at
+# EUR 57) gives slope ~ -5.3 EUR/MWh per bcm of base demand, i.e. the
+# inelastic short-run gas demand documented by Burke & Yang (2016).
+# Base curve approximates P = 220 - 5.26*Q over Q in [24, 40] bcm:
+# an essential block of 24 bcm at the rationing ceiling, then 8 blocks of
+# 2 bcm stepping down. Pre-crisis winter clears around EUR 36-47; the
+# crisis supply contraction moves the marginal block 2-3 tiers up to
+# EUR 57-78, matching the observed TTF spike profile.
+#
+# Asia: larger base (~44 bcm addressable), shallower observed response;
+# pre-crisis clears EUR 30-38, crisis EUR 48-68 (JKM $15-24/MMBtu range).
 demand_blocks_base = {
-    "EU":   [(10.0, 100.0), (8.0, 85.0), (8.0, 70.0), (6.0, 60.0),
-             (5.0,  50.0), (4.0, 40.0), (3.0, 30.0), (3.0, 20.0)],
-    "Asia": [(10.0,  90.0), (8.0, 75.0), (8.0, 62.0), (6.0, 52.0),
-             (5.0,  45.0), (4.0, 35.0), (3.0, 28.0), (3.0, 20.0)],
+    "EU":   [(24.0, 120.0), (2.0, 88.0), (2.0, 78.0), (2.0, 68.0),
+             (2.0,  57.0), (2.0, 47.0), (2.0, 36.0), (2.0, 26.0), (2.0, 15.0)],
+    "Asia": [(30.0, 105.0), (2.0, 80.0), (2.0, 68.0), (2.0, 58.0),
+             (2.0,  48.0), (2.0, 38.0), (2.0, 28.0), (2.0, 20.0)],
 }
 
 storage = {
@@ -157,20 +163,25 @@ storage = {
     "Asia": {"S_max":  20.0, "S_init": 10.0, "S_term": 10.0},
 }
 
+# Month-specific EU demand factors derived from observed EU monthly gas
+# demand 2023-2025 (eu_demand_monthly.csv), normalised to the annual mean
+# (~28.2 bcm/month). Replaces the previous flat winter/summer factors:
+# the real seasonal shape peaks at 1.70x in December and troughs at 0.62x
+# in July, a much wider seasonal swing than the old 1.65/0.65 two-level
+# scheme (which misallocated the shoulder months).
+EU_MONTH_FACTOR = {
+    1: 1.41, 2: 1.33, 3: 1.13, 4: 0.87, 5: 0.69, 6: 0.63,
+    7: 0.62, 8: 0.64, 9: 0.78, 10: 0.96, 11: 1.20, 12: 1.70,
+}
 WINTER = {11, 12, 1, 2, 3}
 SUMMER = {6, 7, 8}
-# EU winter seasonality bumped from 1.45 to 1.65 to reflect the empirical
-# winter-vs-shoulder gas demand ratio of ~1.7-1.8 (Eurostat 2018-23, exclu-
-# ding the 2022 anomaly). The previous 1.45 value undercalibrated winter
-# residential and power-sector heating demand, contributing to insufficient
-# winter drawdown of storage in the model.
 def season_factor(r, t):
     m = calendar_month(t)
     if r == "EU":
-        if m in WINTER: return 1.65
-        if m in SUMMER: return 0.65
-        return 1.00
+        return EU_MONTH_FACTOR[m]
     else:
+        # Asia: flatter seasonality (Japan/Korea heating partially offset
+        # by Chinese industrial flatness)
         if m in WINTER: return 1.25
         if m in SUMMER: return 0.85
         return 1.00
@@ -514,6 +525,39 @@ if __name__ == "__main__":
               f"{q_eq['USA']['EU'][nid]:>7.2f} {q_eq['USA']['Asia'][nid]:>7.2f} "
               f"{q_eq['Gulf']['EU'][nid]:>7.2f} {q_eq['Gulf']['Asia'][nid]:>7.2f}  "
               f"{s_eu[nid]:>6.1f}")
+
+    # ------------------------------------------------------------------
+    # CALIBRATION REPORT: model vs observed prices (Sep 2025 - Jun 2026)
+    # Targets from calibration_targets.csv (TTF / JKM monthly averages,
+    # converted at USD/MMBtu x 3.17 = EUR/MWh).
+    # ------------------------------------------------------------------
+    TARGETS = {  # t: (TTF_eur, JKM_eur)
+        -5: (33.0, 36.0), -4: (34.0, 37.0), -3: (36.0, 38.0),
+        -2: (38.0, 39.0), -1: (37.0, 38.0),  0: (37.0, 38.0),
+         1: (57.0, 63.0),  2: (42.0, 55.5),  3: (46.0, 57.0),
+         4: (49.6, 59.5),
+    }
+    print("\n" + "=" * 70)
+    print("CALIBRATION REPORT: model vs observed (Sep 2025 - Jun 2026)")
+    print("=" * 70)
+    print(f"{'t':>3} {'mo':>6}  {'EU_mod':>7} {'EU_obs':>7} {'dEU':>6}   "
+          f"{'AS_mod':>7} {'AS_obs':>7} {'dAS':>6}")
+    sq_err, n_obs = 0.0, 0
+    for nid in REALIZED_IDS:
+        n = NODES[nid]
+        if n.t not in TARGETS:
+            continue
+        eu_obs, as_obs = TARGETS[n.t]
+        eu_mod = prices["EU"][nid] if prices else float('nan')
+        as_mod = prices["Asia"][nid] if prices else float('nan')
+        mo = MONTH_NAMES[calendar_month(n.t)]
+        print(f"{n.t:>+3d} {mo:>6}  {eu_mod:>7.1f} {eu_obs:>7.1f} {eu_mod-eu_obs:>+6.1f}   "
+              f"{as_mod:>7.1f} {as_obs:>7.1f} {as_mod-as_obs:>+6.1f}")
+        sq_err += (eu_mod - eu_obs) ** 2 + (as_mod - as_obs) ** 2
+        n_obs  += 2
+    rmse = (sq_err / max(n_obs, 1)) ** 0.5
+    print("-" * 70)
+    print(f"RMSE over {n_obs} observations: {rmse:.2f} EUR/MWh")
 
     total_min = (time.time() - t_script) / 60
     print(f"\nTotal computing time: {total_min:.1f} min "
