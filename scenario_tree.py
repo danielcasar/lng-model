@@ -34,69 +34,17 @@ import math
 from dataclasses import dataclass, field
 from scipy import stats
 
-# =============================================================================
-# TIME / CALENDAR
-# =============================================================================
-
-# Time indexing convention:
-#   t = -5 to 0  : pre-closure baseline (6 months, Sep 2025 - Feb 2026)
-#   t = +1 to +6 : closure (Mar 2026 - Aug 2026), realized 6-month duration
-#   t = +7 to +24: post-closure recovery (18 months, Sep 2026 - Feb 2028)
-# The post-closure horizon is extended to t = +24 to push the terminal
-# storage constraint (stock at T_LAST = S_term) far enough out that it does
-# not contaminate the reported results at t = +7 to +12. Headline results
-# are reported only for t <= +12; nodes t = +13 to +24 exist solely to give
-# the dynamic-programming structure a credible "tail" so that storage and
-# leader decisions in the early post-closure period reflect genuine
-# forward-looking optimisation rather than the dual of an arbitrary
-# terminal equality at t = +12. This is the standard horizon-extension
-# fix for terminal-condition artefacts in finite-horizon stochastic
-# optimisation (Conejo, Carrion & Morales 2010, ch. 3).
-T_FIRST           = -5
-T_PRE_END         =  0
-T_CLOSURE_START   = +1
-T_CLOSURE_END     = +6
-T_POST_START      = +7
-T_LAST            = +24
-
-# t = +1 -> March 2026 (month 3) -> CAL_OFFSET = 2
-CAL_OFFSET = 2
+# Time horizon and Bayesian priors (with source citations and calibration
+# rationale) live in model_config.py -- the single configuration source.
+# They are re-exported here so downstream imports keep working.
+from model_config import (
+    T_FIRST, T_PRE_END, T_CLOSURE_START, T_CLOSURE_END,
+    T_POST_START, T_LAST, CAL_OFFSET,
+    ALPHA_C_PRIOR, BETA_C_PRIOR, ALPHA_R_PRIOR, BETA_R_PRIOR,
+)
 
 def calendar_month(t):
     return ((CAL_OFFSET + t - 1) % 12) + 1
-
-# =============================================================================
-# BETA-BERNOULLI BAYESIAN PRIORS ON TRANSITION RATES
-# =============================================================================
-# Prior on p_C (monthly closure-arrival rate when open):
-#   Calibrated to the elevated geopolitical-risk regime of 2024-26 rather
-#   than the long historical chokepoint baseline. We use Beta(5, 100) with
-#   prior mean 5/105 = 0.0476/month (~5% monthly probability of a major
-#   closure event under the agents' prior beliefs). Effective sample size
-#   ~100 months reflects the ~10-year post-2014 window of elevated
-#   geopolitical risk during which agents have updated their beliefs about
-#   the current regime. Consistent with Caldara & Iacoviello (2022) GPR
-#   index findings of persistently elevated Middle East risk through 2025-26.
-# Prior on the closure-arrival rate: Beta(2, 40), mean 2/42 = 4.8%/month.
-# CALIBRATED TO THE OBSERVED PRE-CRISIS PREMIUM: TTF was flat at ~37
-# EUR/MWh through Jan-Feb 2026 -- the market priced essentially no
-# imminent-closure premium and was genuinely surprised on 2 March (TTF
-# +55% in two trading days, Kpler). A higher prior (9%/month was tested)
-# generates a winter precautionary premium far above the observed level.
-# Small effective sample size (42 months) keeps the posterior responsive
-# to each new observation, which matters for the crisis-period dynamics
-# (ceasefire dip, re-escalation) carried by the reopening-rate posterior.
-ALPHA_C_PRIOR = 2.0
-BETA_C_PRIOR  = 40.0
-
-# Prior on p_R (monthly reopening rate when closed):
-#   Historical closure durations of major energy-supply chokepoint events
-#   (~5-9 months for most events) suggest a typical duration of ~7 months,
-#   hence prior mean reopening rate of ~0.143/month. We use Beta(2, 12)
-#   with mean 2/14 = 0.143. Smaller effective sample size ~14 months
-#   reflects the limited historical record of individual closure durations.
-ALPHA_R_PRIOR = 2.0
-BETA_R_PRIOR  = 12.0
 
 def beta_mean(alpha, beta):
     """Mean of Beta(alpha, beta)."""

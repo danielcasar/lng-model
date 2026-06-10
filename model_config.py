@@ -1,0 +1,257 @@
+"""
+SINGLE SOURCE OF ALL MODEL CONFIGURATION.
+
+Every tunable value of the model lives in this file: time horizon, Bayesian
+priors, strategic-leader definitions, fringe access, demand staircases,
+seasonality, storage limits, Big-M constants and algorithm settings.
+The supply-side DATA (break-even prices, transport costs, liquefaction
+capacities) lives in lng_data.py, sourced from Zwickl-Bernhard & Neumann
+(2024). The model scripts (11_epec_2leader.py, 12_rolling_epec.py,
+scenario_tree.py) contain only model logic and import everything from here.
+
+Each value carries its source as an inline comment. The companion sheet
+parameters.csv documents the same values row-by-row with units, a type flag
+(Data / Derived / Calibrated / Assumption / Numerical) and full citations —
+update BOTH files together when changing a value.
+"""
+
+# =============================================================================
+# EVENT
+# =============================================================================
+
+EVENT_NAME = "hormuz_closure"    # key into lng_data.EVENTS
+
+# =============================================================================
+# TIME HORIZON
+#
+# Time indexing convention:
+#   t = -5 to 0  : pre-closure baseline (6 months, Sep 2025 - Feb 2026)
+#   t = +1 to +6 : closure (Mar 2026 - Aug 2026), realized 6-month duration
+#   t = +7 to +24: post-closure recovery (18 months, Sep 2026 - Feb 2028)
+# The post-closure horizon is extended to t = +24 to push the terminal
+# storage constraint (stock at T_LAST = S_term) far enough out that it does
+# not contaminate the reported results at t = +7 to +12. Headline results
+# are reported only for t <= +12; nodes t = +13 to +24 exist solely to give
+# the dynamic-programming structure a credible "tail" so that storage and
+# leader decisions in the early post-closure period reflect genuine
+# forward-looking optimisation rather than the dual of an arbitrary
+# terminal equality at t = +12. This is the standard horizon-extension
+# fix for terminal-condition artefacts in finite-horizon stochastic
+# optimisation (Conejo, Carrion & Morales 2010, ch. 3).
+# =============================================================================
+
+T_FIRST           = -5
+T_PRE_END         =  0
+T_CLOSURE_START   = +1     # March 2026 -- realized closure start (Kpler, 2 Mar 2026)
+T_CLOSURE_END     = +6     # Aug 2026 -- scenario assumption: 6-month closure
+T_POST_START      = +7
+T_LAST            = +24
+
+# t = +1 -> March 2026 (month 3) -> CAL_OFFSET = 2
+CAL_OFFSET = 2
+
+# =============================================================================
+# BETA-BERNOULLI BAYESIAN PRIORS ON TRANSITION RATES
+# =============================================================================
+
+# Prior on the closure-arrival rate: Beta(2, 40), mean 2/42 = 4.8%/month.
+# CALIBRATED TO THE OBSERVED PRE-CRISIS PREMIUM: TTF was flat at ~37
+# EUR/MWh through Jan-Feb 2026 -- the market priced essentially no
+# imminent-closure premium and was genuinely surprised on 2 March (TTF
+# +55% in two trading days, Kpler). A higher prior (9%/month was tested)
+# generates a winter precautionary premium far above the observed level.
+# Small effective sample size (42 months) keeps the posterior responsive
+# to each new observation, which matters for the crisis-period dynamics
+# (ceasefire dip, re-escalation) carried by the reopening-rate posterior.
+ALPHA_C_PRIOR = 2.0
+BETA_C_PRIOR  = 40.0
+
+# Prior on p_R (monthly reopening rate when closed):
+#   Historical closure durations of major energy-supply chokepoint events
+#   (~5-9 months for most events) suggest a typical duration of ~7 months,
+#   hence prior mean reopening rate of ~0.143/month. We use Beta(2, 12)
+#   with mean 2/14 = 0.143. Smaller effective sample size ~14 months
+#   reflects the limited historical record of individual closure durations.
+ALPHA_R_PRIOR = 2.0
+BETA_R_PRIOR  = 12.0
+
+# =============================================================================
+# STRATEGIC LEADERS
+#
+# The second strategic leader is a COMPOSITE of the Hormuz-transiting Gulf
+# exporters: Qatar (93% of LNG shipments via Hormuz) and the UAE (96%),
+# jointly ~20% of global LNG exports (Zwickl-Bernhard et al. 2026). Both are
+# stranded identically under a closure, so they face the same strategic
+# situation; aggregating them closes the gap between the event definition
+# (which blocks all Hormuz-transiting capacity) and the strategic-actor set.
+# UAE capacity is represented by the "Other_Middle_East" entry in lng_data.
+# =============================================================================
+
+LEADERS        = ["USA", "Gulf"]
+LEADER_REGIONS = {"USA":  ["EU", "Asia"],
+                  "Gulf": ["EU", "Asia"]}
+GULF_MEMBERS   = ["Qatar", "Other_Middle_East"]
+BLOCKED_LEADERS = {"Gulf"}    # stranded whenever the strait is closed
+
+# Per-leader delivery floor (calibration v3). The floor represents the
+# share of capacity that is NOT strategically withholdable:
+#   USA  0.90 -- US liquefaction ran at ~full utilisation through
+#                2025-26 (EIA LNG export data); "USA" aggregates many
+#                competing private exporters whose individual incentive is
+#                to dispatch, so the unified-actor withholding power is small.
+#   Gulf 0.85 -- QatarEnergy's portfolio is ~85% long-term contracted
+#                (GIIGNL Annual Report); only the residual is discretionary.
+# The floor binds total dispatch (not per-destination), so cross-basin
+# arbitrage of the contracted volume remains a strategic choice.
+# During a closure the blocked leader's capacity is zero => floor zero.
+CONTRACT_FLOOR = {"USA": 0.90, "Gulf": 0.85}
+
+# =============================================================================
+# FRINGE SUPPLIERS (price-taking)
+#
+# Small price-taking LNG fringe RESTORED (calibration v2): the first
+# calibration run showed that without a competitive fringe, the two Cournot
+# leaders facing the steep (inelastic) demand curve withhold supply until
+# prices hit the essential-block ceiling permanently (EU model 119 vs
+# observed 33-38). The real market is disciplined by many small price-taking
+# exporters (~17 bcm/month jointly); restoring them caps the strategic
+# markup at realistic levels. Access shares are stylised destination-market
+# fractions reflecting historical trade patterns (IEA gas-market reports).
+# =============================================================================
+
+SPOT_TRADABLE = 1.00    # full nameplate spot-tradable (former Hypothesis H1 removed)
+
+EU_ACCESS = {
+    "Algeria": 0.5, "Nigeria": 0.5, "Trinidad": 0.6,
+    "Other_Americas": 0.3, "Other_Africa": 0.5,
+}
+ASIA_ACCESS = {
+    "Indonesia": 0.7, "Malaysia": 0.7, "Oman": 0.7, "Other_Asia_Pacific": 0.8,
+    "Australia": 1.0,    # demoted leader, kept as Asian price-taking fringe
+    "Russia":    1.0,    # demoted leader, kept as Asian price-taking fringe
+}
+
+# Pipeline supply: Norwegian exports ~120 bcm/yr = ~10 bcm/month (IEA);
+# Algeria (Transmed/Medgaz) ~4 bcm/month utilised; Sakhalin -> NE Asia
+# ~3 bcm/month. Costs are round-number estimates.
+pipeline = {
+    "EU":   {"Norway_pipe":  {"cost": 16.0, "cap_open": 10.0, "cap_closed": 10.0},
+             "Algeria_pipe": {"cost": 20.0, "cap_open":  4.0, "cap_closed":  4.0}},
+    "Asia": {"Sakhalin_pipe":{"cost": 16.0, "cap_open":  3.0, "cap_closed":  3.0}},
+}
+
+# =============================================================================
+# DEMAND STAIRCASES -- CALIBRATED TO OBSERVED DATA
+# (see calibration_targets.csv and eu_demand_monthly.csv)
+#
+# EU: the observed (quantity, price) pairs straddling the closure imply a
+# steep inverse demand: (Jan26: 49 bcm at EUR 37) vs (Mar26: 35 bcm at
+# EUR 57) gives slope ~ -5.3 EUR/MWh per bcm of base demand, i.e. the
+# inelastic short-run gas demand documented by Burke & Yang (2016).
+# Base curve approximates P = 220 - 5.26*Q over Q in [24, 40] bcm:
+# an essential block of 24 bcm at the rationing ceiling, then 8 blocks of
+# 2 bcm stepping down. Pre-crisis winter clears around EUR 36-47; the
+# crisis supply contraction moves the marginal block 2-3 tiers up to
+# EUR 57-78, matching the observed TTF spike profile.
+#
+# Asia: larger base (~44 bcm addressable), shallower observed response;
+# pre-crisis clears EUR 30-38, crisis EUR 48-68 (JKM $15-24/MMBtu range).
+# Blocks 6-9 = deepened price-elastic tail (calibration v3): Indian /
+# SE-Asian price-sensitive buyers absorb diverted cargoes at $8-12/MMBtu
+# (EUR 25-38); Asia is the world's residual LNG sink. Without this tail
+# the crisis-displaced US volumes could not clear in Asia and were dumped
+# into the EU, crashing the model's EU price to EUR 19 while the observed
+# crisis TTF was EUR 42-57 (set by EU-Asia cargo competition).
+# =============================================================================
+
+demand_blocks_base = {
+    "EU":   [(24.0, 120.0), (2.0, 88.0), (2.0, 78.0), (2.0, 68.0),
+             (2.0,  57.0), (2.0, 47.0), (2.0, 36.0), (2.0, 26.0), (2.0, 15.0)],
+    "Asia": [(30.0, 105.0), (2.0, 80.0), (2.0, 68.0), (2.0, 58.0),
+             (2.0,  48.0), (3.0, 40.0), (4.0, 33.0), (4.0, 27.0), (4.0, 22.0)],
+}
+
+# =============================================================================
+# SEASONALITY
+# =============================================================================
+
+# Month-specific EU demand factors derived from observed EU monthly gas
+# demand 2023-2025 (eu_demand_monthly.csv), normalised to the annual mean
+# (~28.2 bcm/month). The real seasonal shape peaks at 1.70x in December
+# and troughs at 0.62x in July.
+EU_MONTH_FACTOR = {
+    1: 1.41, 2: 1.33, 3: 1.13, 4: 0.87, 5: 0.69, 6: 0.63,
+    7: 0.62, 8: 0.64, 9: 0.78, 10: 0.96, 11: 1.20, 12: 1.70,
+}
+
+# Asia: flatter seasonality (Japan/Korea heating partially offset by flat
+# Chinese industrial demand) -- stylised two-level scheme.
+WINTER = {11, 12, 1, 2, 3}
+SUMMER = {6, 7, 8}
+ASIA_WINTER_FACTOR = 1.25
+ASIA_SUMMER_FACTOR = 0.85
+
+# =============================================================================
+# STORAGE
+# =============================================================================
+
+HOLDING_COST = 0.10    # constant physical storage holding cost (EUR/MWh-month)
+
+storage = {
+    # EU: aggregate working gas volume ~100 bcm, fill ~85% at model start
+    # Sep 2025 (GIE AGSI+). S_term = typical end-of-winter level, imposed
+    # at t = +24 (Feb 2028), far outside the reported window.
+    "EU":   {"S_max": 100.0, "S_init": 85.0, "S_term": 30.0},
+    # Asia: stylised -- NE-Asian LNG tank capacity is small relative to EU
+    # underground storage.
+    "Asia": {"S_max":  20.0, "S_init": 10.0, "S_term": 10.0},
+}
+
+# EU Regulation 2017/1938 (as amended by Reg. (EU) 2022/1032): 90%
+# storage-filling target on 1 November, applied at every realized Nov node.
+EU_NOV_TARGET_FRAC = 0.90
+
+# Observed EU storage cycling envelope (calibration v4): maximum observed
+# end-of-month fill fraction over ~10 years of GIE AGSI+ data. EU storage
+# has NEVER stayed near-full through late winter in any observed year --
+# shippers sell winter volumes forward and contracted cycling forces
+# seasonal release. Without this envelope the MPCC selects a hoarding
+# equilibrium (storage held at ~100% all winter sustaining high prices,
+# dumped only at the terminal nodes outside the reported window) because
+# among the degenerate follower-optimal storage paths the single-level
+# reformulation picks the leader-preferred one.
+EU_MAX_FILL = {   # calendar month -> max end-of-month fill fraction
+    1: 0.80, 2: 0.70, 3: 0.62, 4: 0.68, 5: 0.78, 6: 0.88,
+    7: 0.94, 8: 0.98, 9: 1.00, 10: 1.00, 11: 1.00, 12: 0.92,
+}
+
+# Physical injection / withdrawal deliverability limits (GIE aggregate
+# technical capacity, EU-wide): prevents pathological storage jumps such
+# as a 70 bcm refill within two months.
+EU_MAX_INJECT_BCM   = 12.0   # per month
+EU_MAX_WITHDRAW_BCM = 25.0   # per month
+
+# =============================================================================
+# NUMERICS -- Fortuny-Amat & McCarl (1981) Big-M complementarity constants
+#
+# M_PI / M_DUE must exceed the maximum plausible nodal price (incl.
+# scarcity spikes); M_X / M_D exceed the maximum monthly quantities;
+# M_STOCK exceeds S_max. No economic content.
+# =============================================================================
+
+M_X, M_D, M_PI, M_DUE, M_STOCK = 60.0, 60.0, 600.0, 600.0, 150.0
+
+# =============================================================================
+# ROLLING-HORIZON SETTINGS (12_rolling_epec.py)
+# =============================================================================
+
+# Roll over the reported window. Each re-solve still plans to T_LAST=+24,
+# so even the last implemented month is chosen with a 12-month lookahead.
+ROLL_START = T_FIRST      # -5  (Sep 2025)
+ROLL_END   = +12          # Feb 2027
+
+# Diagonalization settings per monthly re-solve: few iterations + moderate
+# time limit. The damped equilibrium changes only incrementally from month
+# to month, and early iterations capture most of the adjustment.
+ROLL_MAX_ITER   = 4
+ROLL_TIME_LIMIT = 120     # seconds per leader MPCC solve

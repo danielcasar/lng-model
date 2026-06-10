@@ -1,15 +1,15 @@
 Category,Parameter,Value,Unit,Type,Source / Justification,Defined in
-META,sheet_purpose,"Single reference sheet of ALL configuration values and data inputs of the model, with explicit sources. The executable source of truth remains the code; update BOTH together when changing a value.",-,-,-,-
+META,sheet_purpose,"Single reference sheet of ALL configuration values and data inputs of the model, with explicit sources. The executable configuration lives in model_config.py (tunable values) and lng_data.py (supply-side data); update sheet and code together when changing a value.",-,-,-,-
 META,type_legend,"Data = taken from a cited source; Derived = computed from Data; Calibrated = fitted to observed 2025-26 prices in the calibration loop; Assumption = stylised modelling choice; Numerical = solver/algorithm setting with no economic content",-,-,-,-
-Time horizon,T_FIRST,-5,month index,Assumption,Model start Sep 2025: six pre-closure months to establish the baseline equilibrium,scenario_tree.py
-Time horizon,T_PRE_END,0,month index,Assumption,Last pre-closure month = Feb 2026,scenario_tree.py
-Time horizon,T_CLOSURE_START,+1,month index,Data,"Closure begins March 2026 -- realized event date (TTF +55% in two trading days from 2 March 2026, Kpler / press reports)",scenario_tree.py
-Time horizon,T_CLOSURE_END,+6,month index,Assumption,"Scenario assumption: 6-month closure (Mar-Aug 2026), within the 5-9 month range of historical energy-chokepoint disruptions",scenario_tree.py
-Time horizon,T_LAST,+24,month index,Numerical,"Horizon extension so the terminal-storage equality does not contaminate reported results at t<=+12 (standard fix for terminal-condition artefacts: Conejo, Carrion & Morales 2010, ch. 3)",scenario_tree.py
-Time horizon,reporting window,t <= +12,month index,Assumption,Headline results reported through Feb 2027 only; t=+13..+24 are a dynamic-programming tail,scenario_tree.py
-Time horizon,CAL_OFFSET,2,-,Derived,Maps t=+1 to calendar March (month 3),scenario_tree.py
-Bayesian beliefs,ALPHA_C_PRIOR / BETA_C_PRIOR,2 / 40,Beta counts,Calibrated,"Prior on monthly closure-arrival rate, mean 2/42 = 4.8%/month. Fitted to the observed FLAT pre-crisis TTF (~33-38 EUR/MWh Sep 2025 - Feb 2026): the market priced essentially no imminent-closure premium and was surprised on 2 March (Kpler). Framework: Grenadier & Malenko (2010, J. Finance); Bouri et al. (2020, Energy Economics)",scenario_tree.py
-Bayesian beliefs,ALPHA_R_PRIOR / BETA_R_PRIOR,2 / 12,Beta counts,Assumption,"Prior on monthly reopening rate, mean 2/14 = 14.3%/month, i.e. expected closure duration ~7 months -- consistent with historical closure durations of major supply disruptions (~5-9 months)",scenario_tree.py
+Time horizon,T_FIRST,-5,month index,Assumption,Model start Sep 2025: six pre-closure months to establish the baseline equilibrium,model_config.py
+Time horizon,T_PRE_END,0,month index,Assumption,Last pre-closure month = Feb 2026,model_config.py
+Time horizon,T_CLOSURE_START,+1,month index,Data,"Closure begins March 2026 -- realized event date (TTF +55% in two trading days from 2 March 2026, Kpler / press reports)",model_config.py
+Time horizon,T_CLOSURE_END,+6,month index,Assumption,"Scenario assumption: 6-month closure (Mar-Aug 2026), within the 5-9 month range of historical energy-chokepoint disruptions",model_config.py
+Time horizon,T_LAST,+24,month index,Numerical,"Horizon extension so the terminal-storage equality does not contaminate reported results at t<=+12 (standard fix for terminal-condition artefacts: Conejo, Carrion & Morales 2010, ch. 3)",model_config.py
+Time horizon,reporting window,t <= +12,month index,Assumption,Headline results reported through Feb 2027 only; t=+13..+24 are a dynamic-programming tail,model_config.py
+Time horizon,CAL_OFFSET,2,-,Derived,Maps t=+1 to calendar March (month 3),model_config.py
+Bayesian beliefs,ALPHA_C_PRIOR / BETA_C_PRIOR,2 / 40,Beta counts,Calibrated,"Prior on monthly closure-arrival rate, mean 2/42 = 4.8%/month. Fitted to the observed FLAT pre-crisis TTF (~33-38 EUR/MWh Sep 2025 - Feb 2026): the market priced essentially no imminent-closure premium and was surprised on 2 March (Kpler). Framework: Grenadier & Malenko (2010, J. Finance); Bouri et al. (2020, Energy Economics)",model_config.py
+Bayesian beliefs,ALPHA_R_PRIOR / BETA_R_PRIOR,2 / 12,Beta counts,Assumption,"Prior on monthly reopening rate, mean 2/14 = 14.3%/month, i.e. expected closure duration ~7 months -- consistent with historical closure durations of major supply disruptions (~5-9 months)",model_config.py
 Bayesian beliefs,updating rule,conjugate Beta-Bernoulli,-,Data,"Posterior mean used as branching probability at every tree node; one count added per monthly observation (Grenadier & Malenko 2010; Hou & Nguyen 2018, Energy Economics, for the gas-market Markov-switching precedent)",scenario_tree.py
 Unit conversion,USD_TO_EUR,0.93,EUR/USD,Data,ECB reference rate (2024 average),lng_data.py
 Unit conversion,MMBTU_TO_MWH,0.293,MWh/MMBtu,Data,IEA standard energy conversion,lng_data.py
@@ -63,69 +63,69 @@ Liquefaction capacity,Other_Asia_Pacific,0.752 (= 1.74 bcm/month),bn MMBtu/yr,Da
 Liquefaction capacity,Other_Europe,0.310 (= 0.72 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
 Liquefaction capacity,Trinidad,0.612 (= 1.42 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
 Event,blocked suppliers (Hormuz closure),"Qatar, Oman, Other_Middle_East",-,Data,"All Hormuz-transiting LNG stranded: 93% of Qatari and 96% of UAE LNG shipments transit Hormuz; production (BEP) and untouched routes unchanged",lng_data.py
-Strategic leaders,LEADERS,"USA, Gulf",-,Assumption,"Two-leader EPEC; Gulf = composite of the Hormuz-stranded exporters (jointly ~20% of global LNG exports)",11_epec_2leader.py
-Strategic leaders,GULF_MEMBERS,"Qatar, Other_Middle_East (UAE)",-,Assumption,"Both face identical blocking exposure (93%/96% Hormuz transit shares), so aggregation is the natural coalition",11_epec_2leader.py
+Strategic leaders,LEADERS,"USA, Gulf",-,Assumption,"Two-leader EPEC; Gulf = composite of the Hormuz-stranded exporters (jointly ~20% of global LNG exports)",model_config.py
+Strategic leaders,GULF_MEMBERS,"Qatar, Other_Middle_East (UAE)",-,Assumption,"Both face identical blocking exposure (93%/96% Hormuz transit shares), so aggregation is the natural coalition",model_config.py
 Strategic leaders,Gulf delivered cost,= Qatar's delivered cost,EUR/MWh,Derived,"Capacity-weighted composite BEP differs by < $0.03/MMBtu from Qatar's (UAE ~4% of composite capacity)",11_epec_2leader.py
 Strategic leaders,leader capacity USA,18.35,bcm/month,Derived,From liquefaction capacity table above,11_epec_2leader.py
 Strategic leaders,leader capacity Gulf,15.13 (0 when strait closed),bcm/month,Derived,= Qatar 14.49 + UAE 0.64; zero at every CLOSED tree node,11_epec_2leader.py
-Strategic leaders,CONTRACT_FLOOR USA,0.90,fraction of available capacity,Data,"US liquefaction ran at ~full utilisation through 2025-26 (EIA LNG export data); 'USA' aggregates many competing private exporters with individual dispatch incentives, so unified withholding power is small. Calibration v3",11_epec_2leader.py
-Strategic leaders,CONTRACT_FLOOR Gulf,0.85,fraction of available capacity,Data,"QatarEnergy portfolio ~85% long-term contracted (GIIGNL Annual Report); only the residual is discretionary spot. Floor binds TOTAL dispatch, cross-basin allocation stays strategic. Calibration v3",11_epec_2leader.py
-Fringe,SPOT_TRADABLE,1.00,fraction,Assumption,Full nameplate capacity spot-tradable (former Hypothesis H1 removed),11_epec_2leader.py
-Fringe,EU access share Algeria,0.5,fraction of capacity,Assumption,"Stylised destination-market access reflecting historical trade patterns (IEA gas-market reports); fringe is price-taking, restored in calibration v2 to discipline the strategic markup",11_epec_2leader.py
-Fringe,EU access share Nigeria,0.5,fraction of capacity,Assumption,As above,11_epec_2leader.py
-Fringe,EU access share Trinidad,0.6,fraction of capacity,Assumption,As above,11_epec_2leader.py
-Fringe,EU access share Other_Americas,0.3,fraction of capacity,Assumption,As above,11_epec_2leader.py
-Fringe,EU access share Other_Africa,0.5,fraction of capacity,Assumption,As above,11_epec_2leader.py
-Fringe,Asia access share Indonesia,0.7,fraction of capacity,Assumption,As above,11_epec_2leader.py
-Fringe,Asia access share Malaysia,0.7,fraction of capacity,Assumption,As above,11_epec_2leader.py
-Fringe,Asia access share Oman,0.7,fraction of capacity,Assumption,"As above; Oman is Hormuz-adjacent but exports from outside the strait, kept in fringe yet blocked during closure per event definition",11_epec_2leader.py
-Fringe,Asia access share Other_Asia_Pacific,0.8,fraction of capacity,Assumption,As above,11_epec_2leader.py
-Fringe,Asia access share Australia,1.0,fraction of capacity,Assumption,Demoted leader kept as Asian price-taking fringe (Asia-locked strategic decision is degenerate),11_epec_2leader.py
-Fringe,Asia access share Russia,1.0,fraction of capacity,Assumption,Demoted leader kept as Asian price-taking fringe,11_epec_2leader.py
-Pipeline,Norway_pipe -> EU,"cost 16.0, cap 10.0",EUR/MWh; bcm/month,Assumption,"Norwegian pipeline exports ~120 bcm/yr = ~10 bcm/month (IEA); cost round-number estimate",11_epec_2leader.py
-Pipeline,Algeria_pipe -> EU,"cost 20.0, cap 4.0",EUR/MWh; bcm/month,Assumption,"Transmed/Medgaz flows ~45-50 bcm/yr capacity, ~4 bcm/month utilised; cost round-number estimate",11_epec_2leader.py
-Pipeline,Sakhalin_pipe -> Asia,"cost 16.0, cap 3.0",EUR/MWh; bcm/month,Assumption,Round-number estimate for Russian pipeline gas to NE Asia,11_epec_2leader.py
-Demand EU,block 1 (essential),"(24.0, 120.0)","(bcm, EUR/MWh)",Calibrated,"EU staircase approximates inverse demand P = 220 - 5.26*Q over Q in [24,40] bcm, fitted to two observed (quantity, price) pairs straddling the closure: (Jan 2026: 49 bcm @ EUR 37) and (Mar 2026: 35 bcm @ EUR 57) from eu_demand_monthly.csv + calibration_targets.csv. Slope ~ -5.3 EUR/MWh per bcm = inelastic short-run gas demand (Burke & Yang 2016). Block 1 = essential heating + petrochemical at the rationing ceiling",11_epec_2leader.py
-Demand EU,block 2,"(2.0, 88.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1 (same fitted staircase),11_epec_2leader.py
-Demand EU,block 3,"(2.0, 78.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,11_epec_2leader.py
-Demand EU,block 4,"(2.0, 68.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,11_epec_2leader.py
-Demand EU,block 5,"(2.0, 57.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,11_epec_2leader.py
-Demand EU,block 6,"(2.0, 47.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,11_epec_2leader.py
-Demand EU,block 7,"(2.0, 36.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,11_epec_2leader.py
-Demand EU,block 8,"(2.0, 26.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,11_epec_2leader.py
-Demand EU,block 9,"(2.0, 15.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,11_epec_2leader.py
-Demand Asia,block 1 (essential),"(30.0, 105.0)","(bcm, EUR/MWh)",Calibrated,"Larger base (~44 bcm addressable), shallower response than EU; pre-crisis clears EUR 30-38, crisis EUR 48-68 (JKM $15-24/MMBtu range, calibration_targets.csv)",11_epec_2leader.py
-Demand Asia,block 2,"(2.0, 80.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 1,11_epec_2leader.py
-Demand Asia,block 3,"(2.0, 68.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 1,11_epec_2leader.py
-Demand Asia,block 4,"(2.0, 58.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 1,11_epec_2leader.py
-Demand Asia,block 5,"(2.0, 48.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 1,11_epec_2leader.py
-Demand Asia,block 6,"(3.0, 40.0)","(bcm, EUR/MWh)",Calibrated,"Blocks 6-9 = deepened price-elastic tail (calibration v3): Indian / SE-Asian price-sensitive buyers absorb diverted cargoes at $8-12/MMBtu (EUR 25-38); Asia is the world's residual LNG sink",11_epec_2leader.py
-Demand Asia,block 7,"(4.0, 33.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 6,11_epec_2leader.py
-Demand Asia,block 8,"(4.0, 27.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 6,11_epec_2leader.py
-Demand Asia,block 9,"(4.0, 22.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 6,11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Jan,1.41,multiplier on block sizes,Data,"Observed EU monthly gas demand 2023-2025 normalised to the annual mean (~28.2 bcm/month); source: eu_demand_monthly.csv (user-provided Eurostat-based series)",11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Feb,1.33,multiplier,Data,eu_demand_monthly.csv (as above),11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Mar,1.13,multiplier,Data,eu_demand_monthly.csv,11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Apr,0.87,multiplier,Data,eu_demand_monthly.csv,11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR May,0.69,multiplier,Data,eu_demand_monthly.csv,11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Jun,0.63,multiplier,Data,eu_demand_monthly.csv,11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Jul,0.62,multiplier,Data,eu_demand_monthly.csv,11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Aug,0.64,multiplier,Data,eu_demand_monthly.csv,11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Sep,0.78,multiplier,Data,eu_demand_monthly.csv,11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Oct,0.96,multiplier,Data,eu_demand_monthly.csv,11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Nov,1.20,multiplier,Data,eu_demand_monthly.csv,11_epec_2leader.py
-Seasonality EU,EU_MONTH_FACTOR Dec,1.70,multiplier,Data,eu_demand_monthly.csv,11_epec_2leader.py
-Seasonality Asia,winter factor (Nov-Mar),1.25,multiplier,Assumption,"Flatter than EU: Japan/Korea heating partially offset by flat Chinese industrial demand",11_epec_2leader.py
-Seasonality Asia,summer factor (Jun-Aug),0.85,multiplier,Assumption,As above,11_epec_2leader.py
-Storage,EU S_max,100.0,bcm,Data,EU aggregate working gas volume ~100 bcm (GIE AGSI+),11_epec_2leader.py
-Storage,EU S_init,85.0,bcm,Data,Observed EU storage fill at model start (Sep 2025) ~85% (GIE AGSI+),11_epec_2leader.py
-Storage,EU S_term,30.0,bcm,Assumption,"Typical end-of-winter EU storage level, imposed at t=+24 (Feb 2028) -- far outside the reported window",11_epec_2leader.py
-Storage,Asia S_max / S_init / S_term,20 / 10 / 10,bcm,Assumption,"Stylised: NE-Asian LNG tank capacity is small relative to EU underground storage",11_epec_2leader.py
-Storage,EU_NOV_MIN,90 (= 0.90 x S_max),bcm,Data,"EU Regulation 2017/1938 as amended by Reg. (EU) 2022/1032: 90% storage-filling target on 1 November, applied at every realized November node",11_epec_2leader.py
-Storage,HOLDING_COST,0.10,EUR/MWh-month,Assumption,Constant physical storage holding cost,11_epec_2leader.py
-Storage,EU_MAX_FILL Jan-Dec,"0.80, 0.70, 0.62, 0.68, 0.78, 0.88, 0.94, 0.98, 1.00, 1.00, 1.00, 0.92",max end-of-month fill fraction,Data,"Maximum observed end-of-month EU fill fraction per calendar month over ~10 years of GIE AGSI+ data (calibration v4): EU storage has never stayed near-full through late winter; prevents the hoarding equilibrium the optimistic MPCC selection otherwise picks",11_epec_2leader.py
-Storage,EU_MAX_INJECT_BCM,12.0,bcm/month,Data,GIE aggregate technical injection capacity (EU-wide),11_epec_2leader.py
-Storage,EU_MAX_WITHDRAW_BCM,25.0,bcm/month,Data,GIE aggregate technical withdrawal capacity (EU-wide),11_epec_2leader.py
+Strategic leaders,CONTRACT_FLOOR USA,0.90,fraction of available capacity,Data,"US liquefaction ran at ~full utilisation through 2025-26 (EIA LNG export data); 'USA' aggregates many competing private exporters with individual dispatch incentives, so unified withholding power is small. Calibration v3",model_config.py
+Strategic leaders,CONTRACT_FLOOR Gulf,0.85,fraction of available capacity,Data,"QatarEnergy portfolio ~85% long-term contracted (GIIGNL Annual Report); only the residual is discretionary spot. Floor binds TOTAL dispatch, cross-basin allocation stays strategic. Calibration v3",model_config.py
+Fringe,SPOT_TRADABLE,1.00,fraction,Assumption,Full nameplate capacity spot-tradable (former Hypothesis H1 removed),model_config.py
+Fringe,EU access share Algeria,0.5,fraction of capacity,Assumption,"Stylised destination-market access reflecting historical trade patterns (IEA gas-market reports); fringe is price-taking, restored in calibration v2 to discipline the strategic markup",model_config.py
+Fringe,EU access share Nigeria,0.5,fraction of capacity,Assumption,As above,model_config.py
+Fringe,EU access share Trinidad,0.6,fraction of capacity,Assumption,As above,model_config.py
+Fringe,EU access share Other_Americas,0.3,fraction of capacity,Assumption,As above,model_config.py
+Fringe,EU access share Other_Africa,0.5,fraction of capacity,Assumption,As above,model_config.py
+Fringe,Asia access share Indonesia,0.7,fraction of capacity,Assumption,As above,model_config.py
+Fringe,Asia access share Malaysia,0.7,fraction of capacity,Assumption,As above,model_config.py
+Fringe,Asia access share Oman,0.7,fraction of capacity,Assumption,"As above; Oman is Hormuz-adjacent but exports from outside the strait, kept in fringe yet blocked during closure per event definition",model_config.py
+Fringe,Asia access share Other_Asia_Pacific,0.8,fraction of capacity,Assumption,As above,model_config.py
+Fringe,Asia access share Australia,1.0,fraction of capacity,Assumption,Demoted leader kept as Asian price-taking fringe (Asia-locked strategic decision is degenerate),model_config.py
+Fringe,Asia access share Russia,1.0,fraction of capacity,Assumption,Demoted leader kept as Asian price-taking fringe,model_config.py
+Pipeline,Norway_pipe -> EU,"cost 16.0, cap 10.0",EUR/MWh; bcm/month,Assumption,"Norwegian pipeline exports ~120 bcm/yr = ~10 bcm/month (IEA); cost round-number estimate",model_config.py
+Pipeline,Algeria_pipe -> EU,"cost 20.0, cap 4.0",EUR/MWh; bcm/month,Assumption,"Transmed/Medgaz flows ~45-50 bcm/yr capacity, ~4 bcm/month utilised; cost round-number estimate",model_config.py
+Pipeline,Sakhalin_pipe -> Asia,"cost 16.0, cap 3.0",EUR/MWh; bcm/month,Assumption,Round-number estimate for Russian pipeline gas to NE Asia,model_config.py
+Demand EU,block 1 (essential),"(24.0, 120.0)","(bcm, EUR/MWh)",Calibrated,"EU staircase approximates inverse demand P = 220 - 5.26*Q over Q in [24,40] bcm, fitted to two observed (quantity, price) pairs straddling the closure: (Jan 2026: 49 bcm @ EUR 37) and (Mar 2026: 35 bcm @ EUR 57) from eu_demand_monthly.csv + calibration_targets.csv. Slope ~ -5.3 EUR/MWh per bcm = inelastic short-run gas demand (Burke & Yang 2016). Block 1 = essential heating + petrochemical at the rationing ceiling",model_config.py
+Demand EU,block 2,"(2.0, 88.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1 (same fitted staircase),model_config.py
+Demand EU,block 3,"(2.0, 78.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 4,"(2.0, 68.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 5,"(2.0, 57.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 6,"(2.0, 47.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 7,"(2.0, 36.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 8,"(2.0, 26.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 9,"(2.0, 15.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand Asia,block 1 (essential),"(30.0, 105.0)","(bcm, EUR/MWh)",Calibrated,"Larger base (~44 bcm addressable), shallower response than EU; pre-crisis clears EUR 30-38, crisis EUR 48-68 (JKM $15-24/MMBtu range, calibration_targets.csv)",model_config.py
+Demand Asia,block 2,"(2.0, 80.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 1,model_config.py
+Demand Asia,block 3,"(2.0, 68.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 1,model_config.py
+Demand Asia,block 4,"(2.0, 58.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 1,model_config.py
+Demand Asia,block 5,"(2.0, 48.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 1,model_config.py
+Demand Asia,block 6,"(3.0, 40.0)","(bcm, EUR/MWh)",Calibrated,"Blocks 6-9 = deepened price-elastic tail (calibration v3): Indian / SE-Asian price-sensitive buyers absorb diverted cargoes at $8-12/MMBtu (EUR 25-38); Asia is the world's residual LNG sink",model_config.py
+Demand Asia,block 7,"(4.0, 33.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 6,model_config.py
+Demand Asia,block 8,"(4.0, 27.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 6,model_config.py
+Demand Asia,block 9,"(4.0, 22.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 6,model_config.py
+Seasonality EU,EU_MONTH_FACTOR Jan,1.41,multiplier on block sizes,Data,"Observed EU monthly gas demand 2023-2025 normalised to the annual mean (~28.2 bcm/month); source: eu_demand_monthly.csv (user-provided Eurostat-based series)",model_config.py
+Seasonality EU,EU_MONTH_FACTOR Feb,1.33,multiplier,Data,eu_demand_monthly.csv (as above),model_config.py
+Seasonality EU,EU_MONTH_FACTOR Mar,1.13,multiplier,Data,eu_demand_monthly.csv,model_config.py
+Seasonality EU,EU_MONTH_FACTOR Apr,0.87,multiplier,Data,eu_demand_monthly.csv,model_config.py
+Seasonality EU,EU_MONTH_FACTOR May,0.69,multiplier,Data,eu_demand_monthly.csv,model_config.py
+Seasonality EU,EU_MONTH_FACTOR Jun,0.63,multiplier,Data,eu_demand_monthly.csv,model_config.py
+Seasonality EU,EU_MONTH_FACTOR Jul,0.62,multiplier,Data,eu_demand_monthly.csv,model_config.py
+Seasonality EU,EU_MONTH_FACTOR Aug,0.64,multiplier,Data,eu_demand_monthly.csv,model_config.py
+Seasonality EU,EU_MONTH_FACTOR Sep,0.78,multiplier,Data,eu_demand_monthly.csv,model_config.py
+Seasonality EU,EU_MONTH_FACTOR Oct,0.96,multiplier,Data,eu_demand_monthly.csv,model_config.py
+Seasonality EU,EU_MONTH_FACTOR Nov,1.20,multiplier,Data,eu_demand_monthly.csv,model_config.py
+Seasonality EU,EU_MONTH_FACTOR Dec,1.70,multiplier,Data,eu_demand_monthly.csv,model_config.py
+Seasonality Asia,winter factor (Nov-Mar),1.25,multiplier,Assumption,"Flatter than EU: Japan/Korea heating partially offset by flat Chinese industrial demand",model_config.py
+Seasonality Asia,summer factor (Jun-Aug),0.85,multiplier,Assumption,As above,model_config.py
+Storage,EU S_max,100.0,bcm,Data,EU aggregate working gas volume ~100 bcm (GIE AGSI+),model_config.py
+Storage,EU S_init,85.0,bcm,Data,Observed EU storage fill at model start (Sep 2025) ~85% (GIE AGSI+),model_config.py
+Storage,EU S_term,30.0,bcm,Assumption,"Typical end-of-winter EU storage level, imposed at t=+24 (Feb 2028) -- far outside the reported window",model_config.py
+Storage,Asia S_max / S_init / S_term,20 / 10 / 10,bcm,Assumption,"Stylised: NE-Asian LNG tank capacity is small relative to EU underground storage",model_config.py
+Storage,EU_NOV_TARGET_FRAC,0.90 (=> EU_NOV_MIN 90 bcm),fraction of S_max,Data,"EU Regulation 2017/1938 as amended by Reg. (EU) 2022/1032: 90% storage-filling target on 1 November, applied at every realized November node",model_config.py
+Storage,HOLDING_COST,0.10,EUR/MWh-month,Assumption,Constant physical storage holding cost,model_config.py
+Storage,EU_MAX_FILL Jan-Dec,"0.80, 0.70, 0.62, 0.68, 0.78, 0.88, 0.94, 0.98, 1.00, 1.00, 1.00, 0.92",max end-of-month fill fraction,Data,"Maximum observed end-of-month EU fill fraction per calendar month over ~10 years of GIE AGSI+ data (calibration v4): EU storage has never stayed near-full through late winter; prevents the hoarding equilibrium the optimistic MPCC selection otherwise picks",model_config.py
+Storage,EU_MAX_INJECT_BCM,12.0,bcm/month,Data,GIE aggregate technical injection capacity (EU-wide),model_config.py
+Storage,EU_MAX_WITHDRAW_BCM,25.0,bcm/month,Data,GIE aggregate technical withdrawal capacity (EU-wide),model_config.py
 Calibration target,t=-5 Sep 2025 (TTF / JKM),33.0 / 36.0,EUR/MWh,Data,"Observed front-month TTF and JKM monthly averages (JKM converted USD/MMBtu -> EUR/MWh); see calibration_targets.csv; market reports LSEG/ICE/Platts via press, retrieved June 2026",calibration_targets.csv
 Calibration target,t=-4 Oct 2025,34.0 / 37.0,EUR/MWh,Data,As above,calibration_targets.csv
 Calibration target,t=-3 Nov 2025,36.0 / 38.0,EUR/MWh,Data,As above,calibration_targets.csv
@@ -136,11 +136,12 @@ Calibration target,t=+1 Mar 2026 (closure),57.0 / 63.0,EUR/MWh,Data,"TTF +55% in
 Calibration target,t=+2 Apr 2026,42.0 / 55.5,EUR/MWh,Data,"Ceasefire-expectation dip (belief-driven; the open/closed information structure cannot reproduce it endogenously -- documented model limitation)",calibration_targets.csv
 Calibration target,t=+3 May 2026,46.0 / 57.0,EUR/MWh,Data,As above (re-escalation),calibration_targets.csv
 Calibration target,t=+4 Jun 2026,49.6 / 59.5,EUR/MWh,Data,"TTF EUR 49.6; JKM $18.75/MMBtu converted",calibration_targets.csv
-Numerics,Big-M (M_X / M_D / M_PI / M_DUE / M_STOCK),60 / 60 / 600 / 600 / 150,bcm or EUR/MWh,Numerical,"Fortuny-Amat & McCarl (1981) disjunctive linearisation of KKT complementarity; M_PI must exceed the maximum plausible nodal price (incl. scarcity spikes), M_X/M_D exceed max monthly quantities, M_STOCK exceeds S_max",11_epec_2leader.py
+Numerics,Big-M (M_X / M_D / M_PI / M_DUE / M_STOCK),60 / 60 / 600 / 600 / 150,bcm or EUR/MWh,Numerical,"Fortuny-Amat & McCarl (1981) disjunctive linearisation of KKT complementarity; M_PI must exceed the maximum plausible nodal price (incl. scarcity spikes), M_X/M_D exceed max monthly quantities, M_STOCK exceeds S_max",model_config.py
 Numerics,Gurobi NonConvex,2,-,Numerical,Bilinear leader objective pi*q -> nonconvex MIQCP,11_epec_2leader.py
 Numerics,MIPGap (diagonalization iterations),0.03,relative gap,Numerical,"Loose 3% gap during iterations: the damped update only uses the best response directionally; final storage-extraction solve uses a tighter gap",11_epec_2leader.py
-Numerics,TimeLimit per leader solve,180 (one-shot) / 120 (rolling),seconds,Numerical,Solver wall-time cap per MPCC,11_epec_2leader.py / 12_rolling_epec.py
-Numerics,diagonalization max_iter,8 (one-shot) / 4 (rolling),iterations,Numerical,"Gauss-Seidel best-response rounds; rolling needs fewer because the equilibrium changes only incrementally month to month",11_epec_2leader.py / 12_rolling_epec.py
+Numerics,TimeLimit per leader solve,180 (one-shot) / 120 (rolling),seconds,Numerical,Solver wall-time cap per MPCC,11_epec_2leader.py / model_config.py
+Numerics,diagonalization max_iter,8 (one-shot) / 4 (rolling),iterations,Numerical,"Gauss-Seidel best-response rounds; rolling needs fewer because the equilibrium changes only incrementally month to month",11_epec_2leader.py / model_config.py
 Numerics,damping alpha,0.4 (one-shot) / 0.5 (rolling),-,Numerical,Damped update q(i+1) = alpha*q_best + (1-alpha)*q(i),11_epec_2leader.py / 12_rolling_epec.py
 Numerics,convergence tol,0.5,bcm,Numerical,Convergence when max |dq| < 0.5 bcm across leaders/regions/nodes,11_epec_2leader.py
-Rolling horizon,ROLL_START / ROLL_END,-5 / +12,month index,Assumption,"Roll window Sep 2025 - Feb 2027; each monthly re-solve still plans to T_LAST=+24, so even the last implemented month has a 12-month lookahead",12_rolling_epec.py
+Rolling horizon,ROLL_START / ROLL_END,-5 / +12,month index,Assumption,"Roll window Sep 2025 - Feb 2027; each monthly re-solve still plans to T_LAST=+24, so even the last implemented month has a 12-month lookahead",model_config.py
+Rolling horizon,ROLL_MAX_ITER / ROLL_TIME_LIMIT,4 / 120,iterations; seconds,Numerical,"Few iterations + moderate time limit per monthly re-solve: the damped equilibrium changes only incrementally month to month",model_config.py

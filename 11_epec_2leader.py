@@ -36,66 +36,27 @@ from scenario_tree import (
     T_POST_START, T_LAST,
 )
 
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
-
-EVENT = ld.EVENTS["hormuz_closure"]
-
-# The second strategic leader is a COMPOSITE of the Hormuz-transiting Gulf
-# exporters: Qatar (93% of LNG shipments via Hormuz) and the UAE (96%),
-# jointly ~20% of global LNG exports (Zwickl-Bernhard et al. 2026). Both are
-# stranded identically under a closure, so they face the same strategic
-# situation; aggregating them closes the gap between the event definition
-# (which blocks all Hormuz-transiting capacity) and the strategic-actor set.
-# UAE capacity is represented by the "Other_Middle_East" entry in lng_data.
-LEADERS        = ["USA", "Gulf"]
-LEADER_REGIONS = {"USA":  ["EU", "Asia"],
-                  "Gulf": ["EU", "Asia"]}
-GULF_MEMBERS   = ["Qatar", "Other_Middle_East"]
-BLOCKED_LEADERS = {"Gulf"}    # stranded whenever the strait is closed
+# ALL configuration values (with source citations) live in model_config.py;
+# this script contains only model logic.
+from model_config import (
+    EVENT_NAME,
+    LEADERS, LEADER_REGIONS, GULF_MEMBERS, BLOCKED_LEADERS, CONTRACT_FLOOR,
+    SPOT_TRADABLE, EU_ACCESS, ASIA_ACCESS, pipeline,
+    demand_blocks_base,
+    EU_MONTH_FACTOR, WINTER, SUMMER, ASIA_WINTER_FACTOR, ASIA_SUMMER_FACTOR,
+    HOLDING_COST, storage, EU_NOV_TARGET_FRAC, EU_MAX_FILL,
+    EU_MAX_INJECT_BCM, EU_MAX_WITHDRAW_BCM,
+    M_X, M_D, M_PI, M_DUE, M_STOCK,
+)
 
 # =============================================================================
-# FRINGE SUPPLIERS
-# Australia and Russia remain in the Asian fringe. Qatar is now a leader,
-# so it is REMOVED from the fringe. Spot-tradable shares per Hypothesis H1.
+# DERIVED MARKET STRUCTURE (from model_config + lng_data)
 # =============================================================================
 
-SPOT_TRADABLE = 1.00    # H1 removed -- full nameplate spot-tradable
+EVENT = ld.EVENTS[EVENT_NAME]
 
-# Fringe trimmed to the structurally significant Asian price-taking exporters
-# (Australia, Russia) plus the EU pipeline supply (Norway, Algeria-pipe) and
-# the Asian pipeline (Sakhalin). The smaller LNG exporters (Algeria-LNG,
-# Nigeria, Trinidad, Other_Americas, Other_Africa, Indonesia, Malaysia, Oman,
-# Other_Asia_Pacific) were collectively about 10% of global LNG trade and
-# individually too small to influence the strategic equilibrium; they are
-# folded out to clean the model down to the four-actor structure (US + Qatar
-# strategic, Australia + Russia fringe) covering >70% of global LNG capacity
-# per Bruegel and IEA gas-market reports.
-# Small price-taking LNG fringe RESTORED (calibration v2): the first
-# calibration run showed that without a competitive fringe, the two Cournot
-# leaders facing the steep (inelastic) demand curve withhold supply until
-# prices hit the essential-block ceiling permanently (EU model 119 vs
-# observed 33-38). The real market is disciplined by many small price-taking
-# exporters (~17 bcm/month jointly); restoring them caps the strategic
-# markup at realistic levels.
-_EU_ACCESS = {
-    "Algeria": 0.5, "Nigeria": 0.5, "Trinidad": 0.6,
-    "Other_Americas": 0.3, "Other_Africa": 0.5,
-}
-_ASIA_ACCESS = {
-    "Indonesia": 0.7, "Malaysia": 0.7, "Oman": 0.7, "Other_Asia_Pacific": 0.8,
-    "Australia": 1.0,    # demoted leader, kept as Asian price-taking fringe
-    "Russia":    1.0,    # demoted leader, kept as Asian price-taking fringe
-}
-EU_FRINGE_share   = {e: SPOT_TRADABLE * s for e, s in _EU_ACCESS.items()}
-ASIA_FRINGE_share = {e: SPOT_TRADABLE * s for e, s in _ASIA_ACCESS.items()}
-
-pipeline = {
-    "EU":   {"Norway_pipe":  {"cost": 16.0, "cap_open": 10.0, "cap_closed": 10.0},
-             "Algeria_pipe": {"cost": 20.0, "cap_open":  4.0, "cap_closed":  4.0}},
-    "Asia": {"Sakhalin_pipe":{"cost": 16.0, "cap_open":  3.0, "cap_closed":  3.0}},
-}
+EU_FRINGE_share   = {e: SPOT_TRADABLE * s for e, s in EU_ACCESS.items()}
+ASIA_FRINGE_share = {e: SPOT_TRADABLE * s for e, s in ASIA_ACCESS.items()}
 
 lng_EU_fringe   = ld.regional_supply("EU",   list(EU_FRINGE_share),   EU_FRINGE_share,
                                      blocked_suppliers=EVENT["blocked_suppliers"])
@@ -132,95 +93,16 @@ def leader_cap_at_node(L, node):
     return _LEADER_CAP_BASE[L]
 
 # =============================================================================
-# DEMAND BLOCKS / STORAGE / SEASONALITY
-# Re-calibrated EU block 1: 22 bcm (from AGSI+ peak winter throughput).
+# DEMAND / SEASONALITY HELPERS (values in model_config.py)
 # =============================================================================
 
-HOLDING_COST = 0.10    # constant physical storage holding cost (EUR/MWh-month)
-
-# Demand-block WTPs re-anchored to industry fuel-switching prices (vs stylised
-# marginal-utility tiers). EU block 1 (essential heating + petrochemical):
-# €120/MWh, slightly above coal-with-EUA parity; block 2 (industrial, coal-
-# switch): €60/MWh, EUA-inclusive parity vs coal; block 3 (power-sector
-# fuel-switch to renewables/coal): €35/MWh. Asia block 1 (essential heating):
-# €110/MWh; block 2 (industrial): €55/MWh; block 3 (price-elastic): €22/MWh.
-# These values are anchored to typical 2024-25 TTF (€32-50/MWh) and JKM
-# (€40-50/MWh) clearing levels rather than to the high marginal-utility tiers
-# of the previous calibration.
-# Demand staircase CALIBRATED TO OBSERVED DATA (see calibration_targets.csv
-# and eu_demand_monthly.csv):
-#
-# EU: the observed (quantity, price) pairs straddling the closure imply a
-# steep inverse demand: (Jan26: 49 bcm at EUR 37) vs (Mar26: 35 bcm at
-# EUR 57) gives slope ~ -5.3 EUR/MWh per bcm of base demand, i.e. the
-# inelastic short-run gas demand documented by Burke & Yang (2016).
-# Base curve approximates P = 220 - 5.26*Q over Q in [24, 40] bcm:
-# an essential block of 24 bcm at the rationing ceiling, then 8 blocks of
-# 2 bcm stepping down. Pre-crisis winter clears around EUR 36-47; the
-# crisis supply contraction moves the marginal block 2-3 tiers up to
-# EUR 57-78, matching the observed TTF spike profile.
-#
-# Asia: larger base (~44 bcm addressable), shallower observed response;
-# pre-crisis clears EUR 30-38, crisis EUR 48-68 (JKM $15-24/MMBtu range).
-demand_blocks_base = {
-    "EU":   [(24.0, 120.0), (2.0, 88.0), (2.0, 78.0), (2.0, 68.0),
-             (2.0,  57.0), (2.0, 47.0), (2.0, 36.0), (2.0, 26.0), (2.0, 15.0)],
-    # Asia (calibration v3): deepened price-elastic tail. Asia is the
-    # world's residual LNG sink -- Indian / SE-Asian price-sensitive buyers
-    # absorb diverted cargoes at $8-12/MMBtu (EUR 25-38). Without this tail
-    # the crisis-displaced US volumes could not clear in Asia and were
-    # dumped into the EU, crashing the model's EU price to EUR 19 while the
-    # observed crisis TTF was EUR 42-57 (set by EU-Asia cargo competition).
-    "Asia": [(30.0, 105.0), (2.0, 80.0), (2.0, 68.0), (2.0, 58.0),
-             (2.0,  48.0), (3.0, 40.0), (4.0, 33.0), (4.0, 27.0), (4.0, 22.0)],
-}
-
-storage = {
-    "EU":   {"S_max": 100.0, "S_init": 85.0, "S_term": 30.0},
-    "Asia": {"S_max":  20.0, "S_init": 10.0, "S_term": 10.0},
-}
-
-# Observed EU storage cycling envelope (calibration v4): maximum observed
-# end-of-month fill fraction over ~10 years of GIE AGSI+ data. EU storage
-# has NEVER stayed near-full through late winter in any observed year --
-# shippers sell winter volumes forward and contracted cycling forces
-# seasonal release. Without this envelope the MPCC selects a hoarding
-# equilibrium (storage held at ~100% all winter sustaining high prices,
-# dumped only at the terminal nodes outside the reported window) because
-# among the degenerate follower-optimal storage paths the single-level
-# reformulation picks the leader-preferred one.
-EU_MAX_FILL = {   # calendar month -> max end-of-month fill fraction
-    1: 0.80, 2: 0.70, 3: 0.62, 4: 0.68, 5: 0.78, 6: 0.88,
-    7: 0.94, 8: 0.98, 9: 1.00, 10: 1.00, 11: 1.00, 12: 0.92,
-}
-
-# Physical injection / withdrawal deliverability limits (GIE aggregate
-# technical capacity, EU-wide): prevents pathological storage jumps such
-# as a 70 bcm refill within two months.
-EU_MAX_INJECT_BCM   = 12.0   # per month
-EU_MAX_WITHDRAW_BCM = 25.0   # per month
-
-# Month-specific EU demand factors derived from observed EU monthly gas
-# demand 2023-2025 (eu_demand_monthly.csv), normalised to the annual mean
-# (~28.2 bcm/month). Replaces the previous flat winter/summer factors:
-# the real seasonal shape peaks at 1.70x in December and troughs at 0.62x
-# in July, a much wider seasonal swing than the old 1.65/0.65 two-level
-# scheme (which misallocated the shoulder months).
-EU_MONTH_FACTOR = {
-    1: 1.41, 2: 1.33, 3: 1.13, 4: 0.87, 5: 0.69, 6: 0.63,
-    7: 0.62, 8: 0.64, 9: 0.78, 10: 0.96, 11: 1.20, 12: 1.70,
-}
-WINTER = {11, 12, 1, 2, 3}
-SUMMER = {6, 7, 8}
 def season_factor(r, t):
     m = calendar_month(t)
     if r == "EU":
         return EU_MONTH_FACTOR[m]
     else:
-        # Asia: flatter seasonality (Japan/Korea heating partially offset
-        # by Chinese industrial flatness)
-        if m in WINTER: return 1.25
-        if m in SUMMER: return 0.85
+        if m in WINTER: return ASIA_WINTER_FACTOR
+        if m in SUMMER: return ASIA_SUMMER_FACTOR
         return 1.00
 
 def cost(r, s):     return fringe[r][s]["cost"]
@@ -236,7 +118,7 @@ def wtp(r, k):      return demand_blocks_base[r][k][1]
 REGIONS  = ("EU", "Asia")
 S_by_r   = {r: list(fringe[r].keys()) for r in REGIONS}
 K_by_r   = {r: list(range(len(demand_blocks_base[r]))) for r in REGIONS}
-EU_NOV_MIN = 0.90 * storage["EU"]["S_max"]    # Reg 2017/1938: 90% Nov-1 target
+EU_NOV_MIN = EU_NOV_TARGET_FRAC * storage["EU"]["S_max"]    # Reg 2017/1938: 90% Nov-1 target
 
 def make_ctx(nodes, realized_ids, s_init):
     """Bundle a scenario tree + initial storage state into the context dict
@@ -266,8 +148,6 @@ REALIZED_IDS = DEFAULT_CTX["REALIZED_IDS"]
 # =============================================================================
 # PER-LEADER MPCC BUILDER (one of two)
 # =============================================================================
-
-M_X, M_D, M_PI, M_DUE, M_STOCK = 60.0, 60.0, 600.0, 600.0, 150.0
 
 def build_leader_mpcc(L, others_q, ctx=None):
     """Build leader L's MPCC with the other leader's q held fixed.
@@ -323,18 +203,9 @@ def build_leader_mpcc(L, others_q, ctx=None):
         return sum(mdl.q[r, nid] for r in accessible) <= leader_cap_at_node(L, NODES[nid])
     m.lcap = pyo.Constraint(m.N, rule=_leader_cap)
 
-    # Per-leader delivery floor (calibration v3). The floor represents the
-    # share of capacity that is NOT strategically withholdable:
-    #   USA  0.90 -- US liquefaction ran at ~full utilisation through
-    #                2025-26; "USA" aggregates many competing private
-    #                exporters whose individual incentive is to dispatch,
-    #                so the unified-actor withholding power is small.
-    #   Gulf 0.85 -- QatarEnergy's portfolio is ~85% long-term contracted
-    #                (GIIGNL); only the residual is discretionary spot.
-    # The floor binds total dispatch (not per-destination), so cross-basin
-    # arbitrage of the contracted volume remains a strategic choice.
-    # During a closure the blocked leader's capacity is zero => floor zero.
-    CONTRACT_FLOOR = {"USA": 0.90, "Gulf": 0.85}
+    # Per-leader delivery floor: share of capacity that is NOT strategically
+    # withholdable (see CONTRACT_FLOOR in model_config.py). Binds total
+    # dispatch, so cross-basin arbitrage stays strategic; zero when blocked.
     def _leader_floor(mdl, nid):
         return (sum(mdl.q[r, nid] for r in accessible)
                 >= CONTRACT_FLOOR[L] * leader_cap_at_node(L, NODES[nid]))

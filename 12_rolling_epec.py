@@ -37,6 +37,8 @@ from scenario_tree import (
     T_FIRST, T_LAST,
     ALPHA_C_PRIOR, BETA_C_PRIOR, ALPHA_R_PRIOR, BETA_R_PRIOR,
 )
+# Rolling-horizon settings (with rationale) live in model_config.py
+from model_config import ROLL_START, ROLL_END, ROLL_MAX_ITER, ROLL_TIME_LIMIT
 
 # module name starts with a digit -> import via importlib
 m11 = importlib.import_module("11_epec_2leader")
@@ -44,17 +46,6 @@ m11 = importlib.import_module("11_epec_2leader")
 REGIONS  = m11.REGIONS
 LEADERS  = m11.LEADERS
 storage  = m11.storage
-
-# Roll over the reported window. Each re-solve still plans to T_LAST=+24,
-# so even the last implemented month is chosen with a 12-month lookahead.
-ROLL_START = T_FIRST      # -5  (Sep 2025)
-ROLL_END   = +12          # Feb 2027
-
-# Diagonalization settings per monthly re-solve: few iterations + moderate
-# time limit. The damped equilibrium changes only incrementally from month
-# to month, and early iterations capture most of the adjustment.
-ROLL_MAX_ITER   = 4
-ROLL_TIME_LIMIT = 120     # seconds per leader MPCC solve
 
 MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]

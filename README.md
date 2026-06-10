@@ -73,8 +73,9 @@ realised-path equilibrium table at the end.
 
 | File | Role |
 |---|---|
+| `model_config.py` | **Single configuration source.** Every tunable value of the model (time horizon, priors, leaders, fringe, demand staircases, seasonality, storage, Big-Ms, rolling settings) with inline source citations. The model scripts import everything from here. |
 | `parameters.csv` | **Single reference sheet of ALL configuration values and data inputs**, each with unit, type (Data / Derived / Calibrated / Assumption / Numerical) and explicit source citation. Start here for any sanity check. |
-| `lng_data.py` | Calibration data: break-even prices, transport costs, liquefaction capacities, region-access shares, and event definitions. Sourced from Zwickl-Bernhard & Neumann (2024) Table 6 and Appendix A. |
+| `lng_data.py` | Supply-side data: break-even prices, transport costs, liquefaction capacities, and event definitions. Sourced from Zwickl-Bernhard & Neumann (2024) Table 6 and Appendix A. |
 | `scenario_tree.py` | Builds the 59-node Bayesian scenario tree. Maintains posterior Beta-Bernoulli beliefs over the two-state Markov chain transition rates. |
 | `11_epec_2leader.py` | One-shot (open-loop) two-leader stochastic Stackelberg EPEC with Gauss–Seidel diagonalization. |
 | `12_rolling_epec.py` | **The main model.** Rolling-horizon driver: re-solves the EPEC every month with updated Bayesian beliefs and carried-over storage, implementing only the current month's decisions. |
@@ -86,12 +87,12 @@ realised-path equilibrium table at the end.
 
 ## Model parameters
 
-All parameters — every numerical value the model uses, including unit
-conversions, demand staircases, storage limits, Bayesian priors, contract
-floors and solver settings — are documented in **`parameters.csv`**, one row
-per value, with the source cited explicitly and a type flag distinguishing
-cited data from calibrated and stylised values. The code remains the
-executable source of truth; change both together.
+All configuration lives in **`model_config.py`** (tunable values, with
+inline citations) and **`lng_data.py`** (supply-side data). The companion
+sheet **`parameters.csv`** documents every value row by row with unit,
+explicit source, and a type flag distinguishing cited data from calibrated
+and stylised values. When changing a value, edit `model_config.py` and
+update the corresponding row in `parameters.csv`.
 
 ---
 
