@@ -41,10 +41,12 @@ from scenario_tree import (
 from model_config import (
     EVENT_NAME,
     LEADERS, LEADER_REGIONS, GULF_MEMBERS, BLOCKED_LEADERS, CONTRACT_FLOOR,
+    GULF_RESTART_RAMP, GULF_DAMAGE_FACTOR,
     SPOT_TRADABLE, EU_ACCESS, ASIA_ACCESS, pipeline,
     demand_blocks_base,
     EU_MONTH_FACTOR, WINTER, SUMMER, ASIA_WINTER_FACTOR, ASIA_SUMMER_FACTOR,
-    HOLDING_COST, storage, EU_NOV_TARGET_FRAC,
+    HOLDING_COST, storage, EU_NOV_TARGET_FRAC, EU_NOV_TARGET_FRAC_2026,
+    NOV_2026_T, STORAGE_TARGETS_EU,
     EU_MAX_INJECT_BCM, EU_MAX_WITHDRAW_BCM,
     M_FRINGE, M_DEMAND, M_PRICE, M_KKT, M_STORAGE,
 )
@@ -87,10 +89,35 @@ _LEADER_CAP_BASE = {
 
 def leader_cap_at_node(leader, node):
     """Monthly capacity of a leader at a scenario-tree node.
-    Zero if the Strait is closed there and the leader is Hormuz-stranded."""
-    if (not node.closure_open) and leader in BLOCKED_LEADERS:
+
+    Blocked (Gulf) leader: zero while the strait is closed; after a
+    reopening the restart is gradual (Fulwood 2026, OIES): ~50% in the
+    first open month, ~91% thereafter (two damaged Ras Laffan trains
+    offline beyond the horizon). Branches on which no closure ever
+    happened keep full capacity."""
+    if leader not in BLOCKED_LEADERS:
+        return _LEADER_CAP_BASE[leader]
+    if not node.closure_open:
         return 0.0
-    return _LEADER_CAP_BASE[leader]
+
+    statuses = [open_ for (_, open_) in node.history]
+    if all(statuses):
+        # No closure observed on this branch. For rolling-horizon subtrees
+        # rooted after the realized closure, the closure lies before the
+        # subtree root: recover it from the realized calendar.
+        if node.t > T_CLOSURE_END and node.history[0][0] > T_CLOSURE_START:
+            months_open = node.t - T_CLOSURE_END
+        else:
+            return _LEADER_CAP_BASE[leader]      # genuinely never closed
+    else:
+        months_open = 0                          # consecutive open months
+        for open_ in reversed(statuses):         # since the last closure
+            if not open_:
+                break
+            months_open += 1
+
+    factor = GULF_RESTART_RAMP if months_open == 1 else GULF_DAMAGE_FACTOR
+    return factor * _LEADER_CAP_BASE[leader]
 
 # =============================================================================
 # DEMAND / SEASONALITY HELPERS (values in model_config.py)
@@ -272,9 +299,14 @@ def build_leader_mpcc(leader, others_q, ctx=None):
         return model.storage_level[region, node_id] == storage[region]["S_term"]
     model.terminal_storage = pyo.Constraint(model.R, model.N, rule=_terminal_storage)
 
+    # 1-Nov filling target: 90% normally; 80% for the crisis-year November
+    # (EU flexibility mechanism; Fulwood 2026 projects 76-81 bcm on
+    # 1 Nov 2026 -- the 90% target is unattainable that year).
     def _nov_mandate(model, node_id):
         if node_id not in NOV_TARGETS_EU_NODES: return pyo.Constraint.Skip
-        return model.storage_level["EU", node_id] >= EU_NOV_MIN
+        frac = (EU_NOV_TARGET_FRAC_2026 if NODES[node_id].t == NOV_2026_T
+                else EU_NOV_TARGET_FRAC)
+        return model.storage_level["EU", node_id] >= frac * storage["EU"]["S_max"]
     model.nov_mandate = pyo.Constraint(model.N, rule=_nov_mandate)
 
     # KKT stationarity conditions of the followers' market-clearing problem:
@@ -613,6 +645,12 @@ if __name__ == "__main__":
     rmse = (sq_err / max(n_obs, 1)) ** 0.5
     print("-" * 70)
     print(f"RMSE over {n_obs} observations: {rmse:.2f} EUR/MWh")
+
+    for t_obs, s_obs in sorted(STORAGE_TARGETS_EU.items()):
+        node_obs = next((x for x in REALIZED_IDS if NODES[x].t == t_obs), None)
+        if node_obs is not None:
+            print(f"Storage check t={t_obs:+d}: model S_EU={s_eu[node_obs]:.1f} bcm "
+                  f"vs observed {s_obs:.1f} bcm (GIE AGSI+ / Fulwood 2026)")
 
     total_min = (time.time() - t_script) / 60
     print(f"\nTotal computing time: {total_min:.1f} min "

@@ -93,6 +93,15 @@ LEADER_REGIONS = {"USA":  ["EU", "Asia"],
 GULF_MEMBERS   = ["Qatar", "Other_Middle_East"]
 BLOCKED_LEADERS = {"Gulf"}    # stranded whenever the strait is closed
 
+# Gulf restart is NOT instantaneous after a reopening (Fulwood 2026, OIES):
+# Ras Laffan needs 2-4 weeks to restart plus 1-2 weeks to ramp, Das Island
+# ~3 weeks -- so the first open month delivers only about half of capacity.
+# Two damaged Ras Laffan trains stay offline until ~2031 (~1.3 bcm/month of
+# the 15.1 bcm/month composite), so capacity after any closure is
+# permanently ~9% lower within our horizon.
+GULF_RESTART_RAMP  = 0.50   # capacity factor in the first month after reopening
+GULF_DAMAGE_FACTOR = 0.91   # capacity factor thereafter (damaged trains)
+
 # Per-leader delivery floor (calibration v3). The floor represents the
 # share of capacity that is NOT strategically withholdable:
 #   USA  0.90 -- US liquefaction ran at ~full utilisation through
@@ -172,11 +181,17 @@ pipeline = {
 # but places steps at ~5 EUR spacing across EU 31-55 and Asia 34-60.
 # =============================================================================
 
+# Asia tail re-anchored to Fulwood (2026, OIES): Indian demand destruction
+# only "starts to trigger" at TTF ~$25/MMBtu (~EUR 79/MWh), and South-Asian
+# + Chinese LNG imports fall by merely 3-18 bcm per YEAR even in the severe
+# scenarios -- nothing like the 12 bcm per MONTH the v5 tail absorbed at
+# EUR 23-34. v6 shrinks the deep tail and moves volume into the EUR 40-60
+# mid-range where the crisis-month JKM (obs EUR 55-63) actually cleared.
 demand_blocks_base = {
     "EU":   [(24.0, 120.0), (2.0, 80.0), (2.0, 65.0), (2.0, 55.0),
              (2.0,  48.0), (2.0, 42.0), (2.0, 37.0), (2.0, 31.0), (2.0, 24.0)],
-    "Asia": [(30.0, 105.0), (2.0, 72.0), (2.0, 60.0), (2.0, 52.0),
-             (2.0,  45.0), (3.0, 39.0), (4.0, 34.0), (4.0, 28.0), (4.0, 23.0)],
+    "Asia": [(30.0, 105.0), (2.0, 79.0), (2.0, 68.0), (2.0, 60.0),
+             (2.0,  52.0), (3.0, 46.0), (4.0, 40.0), (3.0, 32.0), (3.0, 24.0)],
 }
 
 # =============================================================================
@@ -221,6 +236,17 @@ storage = {
 # EU Regulation 2017/1938 (as amended by Reg. (EU) 2022/1032): 90%
 # storage-filling target on 1 November, applied at every realized Nov node.
 EU_NOV_TARGET_FRAC = 0.90
+# Crisis-year November (1 Nov 2026, t = +8): the 90% target is unattainable
+# and the EU flexibility mechanism applies. Fulwood (2026, OIES) projects
+# 1 Nov 2026 stocks of 76-81 bcm; we impose 80% (80 bcm).
+EU_NOV_TARGET_FRAC_2026 = 0.80
+NOV_2026_T = +8             # tree month of the crisis-year 1-Nov checkpoint
+
+# Observed EU storage calibration targets (end-of-month stocks, bcm):
+# end-March 2026 EU-27 stocks were 30 bcm -- 6 bcm lower year-on-year and
+# 16 bcm below the 2022-25 end-March average (Fulwood 2026, OIES / GIE
+# AGSI+). Reported against the model's realized-path storage trajectory.
+STORAGE_TARGETS_EU = {+1: 30.0}
 
 # NOTE: the v4 "storage cycling envelope" (month-specific max-fill bounds
 # from AGSI+ data) was REMOVED in v6 as too restrictive: seasonal storage

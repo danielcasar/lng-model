@@ -178,6 +178,12 @@ def roll():
     print("-" * 70)
     print(f"RMSE over {n_obs} observations: {rmse:.2f} EUR/MWh")
 
+    for t_obs, s_obs in sorted(m11.STORAGE_TARGETS_EU.items()):
+        rec_obs = next((x for x in trajectory if x["t"] == t_obs), None)
+        if rec_obs is not None:
+            print(f"Storage check t={t_obs:+d}: model S_EU={rec_obs['S_EU']:.1f} bcm "
+                  f"vs observed {s_obs:.1f} bcm (GIE AGSI+ / Fulwood 2026)")
+
     total_min = (time.time() - t_script) / 60
     print(f"\nTotal computing time: {total_min:.1f} min "
           f"({len(trajectory)} monthly re-solves x {ROLL_MAX_ITER} iterations)",
