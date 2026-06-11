@@ -46,7 +46,7 @@ from model_config import (
     demand_blocks_base,
     EU_MONTH_FACTOR, WINTER, SUMMER, ASIA_WINTER_FACTOR, ASIA_SUMMER_FACTOR,
     HOLDING_COST, storage, EU_NOV_TARGET_FRAC, EU_NOV_TARGET_FRAC_2026,
-    NOV_2026_T, STORAGE_TARGETS_EU,
+    NOV_2026_T, STORAGE_TARGETS_EU, LNG_AVAILABILITY,
     EU_MAX_INJECT_BCM, EU_MAX_WITHDRAW_BCM,
     M_FRINGE, M_DEMAND, M_PRICE, M_KKT, M_STORAGE,
 )
@@ -57,8 +57,12 @@ from model_config import (
 
 EVENT = ld.EVENTS[EVENT_NAME]
 
-EU_FRINGE_share   = {e: SPOT_TRADABLE * supplier for e, supplier in EU_ACCESS.items()}
-ASIA_FRINGE_share = {e: SPOT_TRADABLE * supplier for e, supplier in ASIA_ACCESS.items()}
+# Access share x spot-tradability x availability (maintenance/feedgas
+# derating of LNG plants; pipelines and non-LNG aggregates unaffected)
+EU_FRINGE_share   = {e: SPOT_TRADABLE * LNG_AVAILABILITY * supplier
+                     for e, supplier in EU_ACCESS.items()}
+ASIA_FRINGE_share = {e: SPOT_TRADABLE * LNG_AVAILABILITY * supplier
+                     for e, supplier in ASIA_ACCESS.items()}
 
 lng_EU_fringe   = ld.regional_supply("EU",   list(EU_FRINGE_share),   EU_FRINGE_share,
                                      blocked_suppliers=EVENT["blocked_suppliers"])
@@ -82,9 +86,11 @@ leader_cost = {
     "Gulf": {region: ld.delivered_cost_eur_mwh("Qatar", region) for region in LEADER_REGIONS["Gulf"]},
 }
 _LEADER_CAP_BASE = {
-    "USA":  ld.annual_bn_mmbtu_to_monthly_bcm(ld.LIQ_CAP_BN_MMBTU_YR["USA"]),
-    "Gulf": sum(ld.annual_bn_mmbtu_to_monthly_bcm(ld.LIQ_CAP_BN_MMBTU_YR[member])
-                for member in GULF_MEMBERS),
+    "USA":  LNG_AVAILABILITY
+            * ld.annual_bn_mmbtu_to_monthly_bcm(ld.LIQ_CAP_BN_MMBTU_YR["USA"]),
+    "Gulf": LNG_AVAILABILITY
+            * sum(ld.annual_bn_mmbtu_to_monthly_bcm(ld.LIQ_CAP_BN_MMBTU_YR[member])
+                  for member in GULF_MEMBERS),
 }
 
 def leader_cap_at_node(leader, node):

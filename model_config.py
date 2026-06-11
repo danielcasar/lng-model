@@ -110,6 +110,14 @@ BLOCKED_LEADERS = {"Gulf"}    # stranded whenever the strait is closed
 GULF_RESTART_RAMP  = 0.50   # capacity factor in the first month after reopening
 GULF_DAMAGE_FACTOR = 0.91   # capacity factor thereafter (damaged trains)
 
+# AVAILABLE vs nameplate LNG capacity (calibration v7): scheduled and
+# unscheduled maintenance, technical outages and feedgas constraints keep
+# available capacity below nameplate -- Fulwood (2024, OIES NG 195,
+# footnote 3 and Fig. 4): the ~98% pre-crisis utilisation is of AVAILABLE
+# capacity. Applied to all LNG suppliers (leaders + fringe), not to
+# pipelines or the non-LNG aggregates.
+LNG_AVAILABILITY = 0.92
+
 # Per-leader delivery floor (calibration v3). The floor represents the
 # share of capacity that is NOT strategically withholdable:
 #   USA  0.90 -- US liquefaction ran at ~full utilisation through
@@ -163,17 +171,16 @@ ASIA_ACCESS = {
 #   EU_other_supply  ~9 bcm/month: EU domestic production ~3 (DE/IT/RO/
 #     DK/NL residual), UK net flows ~2, Azerbaijan TAP ~1, Turkstream
 #     ~1.3, Libya ~0.2, biomethane ~1.5  (IEA Gas Market Report 2026)
-#   Asia_other_supply ~12 bcm/month (v6.2, was 22): Chinese pipeline
-#     imports ~8 (Central Asia + Power of Siberia + Myanmar) + ~4
-#     inflexible misc. The "marginal domestic production" component was
-#     dropped -- domestic Chinese/Indian production cannot surge into
-#     the seaborne spot market that the JKM staircase represents  (IEA)
+#   Asia_other_supply ~8 bcm/month (v7, was 12): Chinese pipeline
+#     imports ONLY (Central Asia ~4 + Power of Siberia ~3.5 + Myanmar
+#     ~0.3, IEA). Domestic production cannot surge into the seaborne
+#     spot market that the JKM staircase represents.
 pipeline = {
     "EU":   {"Norway_pipe":  {"cost": 16.0, "cap_open": 10.0, "cap_closed": 10.0},
              "Algeria_pipe": {"cost": 20.0, "cap_open":  4.0, "cap_closed":  4.0},
              "EU_other_supply": {"cost": 13.0, "cap_open": 9.0, "cap_closed": 9.0}},
     "Asia": {"Sakhalin_pipe":{"cost": 16.0, "cap_open":  3.0, "cap_closed":  3.0},
-             "Asia_other_supply": {"cost": 12.0, "cap_open": 12.0, "cap_closed": 12.0}},
+             "Asia_other_supply": {"cost": 12.0, "cap_open": 8.0, "cap_closed": 8.0}},
 }
 
 # =============================================================================
@@ -223,8 +230,13 @@ pipeline = {
 # EUR 23-34. v6 shrinks the deep tail and moves volume into the EUR 40-60
 # mid-range where the crisis-month JKM (obs EUR 55-63) actually cleared.
 demand_blocks_base = {
-    "EU":   [(24.0, 120.0), (2.0, 80.0), (2.0, 65.0), (2.0, 55.0),
-             (2.0,  48.0), (2.0, 42.0), (2.0, 37.0), (2.0, 31.0), (2.0, 24.0)],
+    # EU mid-rungs widened 2.0 -> 2.5 bcm (v7) so the staircase passes
+    # exactly through the observed anchors: Jan-26 cumulative demand above
+    # EUR 37 = 24*1.41 + 15 = 48.8 bcm at the observed (49 bcm, EUR 37);
+    # Mar-26 cumulative above EUR 55 = 27.1 + 7.5 = 34.6 at the observed
+    # (35 bcm, EUR 57).
+    "EU":   [(24.0, 120.0), (2.5, 80.0), (2.5, 65.0), (2.5, 55.0),
+             (2.5,  48.0), (2.5, 42.0), (2.5, 37.0), (2.0, 31.0), (2.0, 24.0)],
     "Asia": [(30.0, 105.0), (2.0, 79.0), (2.0, 68.0), (2.0, 60.0),
              (2.0,  52.0), (3.0, 46.0), (4.0, 40.0), (3.0, 32.0), (3.0, 24.0)],
 }

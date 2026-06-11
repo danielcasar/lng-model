@@ -86,12 +86,12 @@ Pipeline,Norway_pipe -> EU,"cost 16.0, cap 10.0",EUR/MWh; bcm/month,Assumption,"
 Pipeline,Algeria_pipe -> EU,"cost 20.0, cap 4.0",EUR/MWh; bcm/month,Assumption,"Transmed/Medgaz flows ~45-50 bcm/yr capacity, ~4 bcm/month utilised; cost round-number estimate",model_config.py
 Pipeline,Sakhalin_pipe -> Asia,"cost 16.0, cap 3.0",EUR/MWh; bcm/month,Assumption,Round-number estimate for Russian pipeline gas to NE Asia,model_config.py
 Demand EU,block 1 (essential),"(24.0, 120.0)","(bcm, EUR/MWh)",Calibrated,"EU staircase approximates inverse demand P = 220 - 5.26*Q over Q in [24,40] bcm, fitted to two observed (quantity, price) pairs straddling the closure: (Jan 2026: 49 bcm @ EUR 37) and (Mar 2026: 35 bcm @ EUR 57) from eu_demand_monthly.csv + calibration_targets.csv. Slope ~ -5.3 EUR/MWh per bcm = inelastic short-run gas demand (Burke & Yang 2016). Block 1 = essential heating + petrochemical at the rationing ceiling",model_config.py
-Demand EU,block 2,"(2.0, 80.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1 (same fitted staircase),model_config.py
-Demand EU,block 3,"(2.0, 65.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
-Demand EU,block 4,"(2.0, 55.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
-Demand EU,block 5,"(2.0, 48.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
-Demand EU,block 6,"(2.0, 42.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
-Demand EU,block 7,"(2.0, 37.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 2,"(2.5, 80.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1 (same fitted staircase),model_config.py
+Demand EU,block 3,"(2.5, 65.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 4,"(2.5, 55.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 5,"(2.5, 48.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 6,"(2.5, 42.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
+Demand EU,block 7,"(2.5, 37.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
 Demand EU,block 8,"(2.0, 31.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
 Demand EU,block 9,"(2.0, 24.0)","(bcm, EUR/MWh)",Calibrated,See EU block 1,model_config.py
 Demand Asia,block 1 (essential),"(30.0, 105.0)","(bcm, EUR/MWh)",Calibrated,"Larger base (~44 bcm addressable), shallower response than EU; pre-crisis clears EUR 30-38, crisis EUR 48-68 (JKM $15-24/MMBtu range, calibration_targets.csv)",model_config.py
@@ -149,4 +149,5 @@ Strategic leaders,GULF_DAMAGE_FACTOR,0.91,capacity factor,Data,"Two damaged Ras 
 Storage,EU_NOV_TARGET_FRAC_2026,0.80,fraction of S_max,Data,"Crisis-year 1-Nov target: EU flexibility mechanism; Fulwood (2026, OIES) projects 76-81 bcm on 1 Nov 2026 -- the regular 90% is unattainable",model_config.py
 Calibration target,EU storage end-March 2026,30.0,bcm,Data,"EU-27 stocks 30 bcm at end of March 2026: 6 bcm lower y/y and 16 bcm below the 2022-25 end-March average (Fulwood 2026, OIES / GIE AGSI+)",model_config.py
 Pipeline,EU_other_supply -> EU,"cost 13.0, cap 9.0",EUR/MWh; bcm/month,Data,"Non-LNG supply aggregate (v6.1): EU domestic production ~3 + UK net flows ~2 + Azerbaijan TAP ~1 + Turkstream ~1.3 + Libya ~0.2 + biomethane ~1.5 (IEA Gas Market Report 2026). Needed because demand staircases are calibrated to TOTAL demand while the 2026 LNG fleet replaced the oversized 2040 capacities that had accidentally covered this supply",model_config.py
-Pipeline,Asia_other_supply -> Asia,"cost 12.0, cap 12.0",EUR/MWh; bcm/month,Data,"Non-LNG supply aggregate (v6.1): Chinese pipeline imports ~8 (Central Asia, Power of Siberia, Myanmar) + ~4 inflexible misc; marginal domestic production dropped in v6.2 -- it cannot surge into the seaborne spot market (IEA)",model_config.py
+Pipeline,Asia_other_supply -> Asia,"cost 12.0, cap 8.0",EUR/MWh; bcm/month,Data,"Non-LNG supply aggregate (v6.1): Chinese pipeline imports ONLY: Central Asia ~4 + Power of Siberia ~3.5 + Myanmar ~0.3 (IEA, v7); domestic production cannot surge into the seaborne spot market",model_config.py
+Strategic leaders,LNG_AVAILABILITY,0.92,fraction of nameplate,Data,"Available vs nameplate LNG capacity: maintenance, technical outages, feedgas constraints (Fulwood 2024, OIES NG 195, fn. 3 + Fig. 4 -- the ~98% pre-crisis utilisation is of AVAILABLE capacity). Applied to all LNG suppliers, not pipelines/non-LNG aggregates (v7)",model_config.py

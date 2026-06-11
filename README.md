@@ -77,8 +77,9 @@ realised-path equilibrium table at the end.
 | `parameters.csv` | **Single reference sheet of ALL configuration values and data inputs**, each with unit, type (Data / Derived / Calibrated / Assumption / Numerical) and explicit source citation. Start here for any sanity check. |
 | `lng_data.py` | Supply-side data: break-even prices, transport costs, liquefaction capacities, and event definitions. Sourced from Zwickl-Bernhard & Neumann (2024) Table 6 and Appendix A. |
 | `scenario_tree.py` | Builds the 59-node Bayesian scenario tree. Maintains posterior Beta-Bernoulli beliefs over the two-state Markov chain transition rates. |
-| `11_epec_2leader.py` | One-shot (open-loop) two-leader stochastic Stackelberg EPEC with Gauss–Seidel diagonalization. |
-| `12_rolling_epec.py` | **The main model.** Rolling-horizon driver: re-solves the EPEC every month with updated Bayesian beliefs and carried-over storage, implementing only the current month's decisions. |
+| `13_competitive_rolling.py` | **The market core.** Rolling-horizon competitive market model: a welfare-maximisation LP per monthly belief subtree, prices = duals of the nodal market balance. Solves the full 18-month calibration in seconds. |
+| `11_epec_2leader.py` | The strategic comparison model: one-shot two-leader stochastic Stackelberg EPEC (MPCC per leader, Gauss–Seidel diagonalization). |
+| `12_rolling_epec.py` | Rolling-horizon driver for the EPEC: re-solves the strategic equilibrium every month with updated Bayesian beliefs and carried-over storage. |
 | `calibration_targets.csv` | Observed monthly TTF / JKM price targets (Sep 2025 – Jun 2026) used in the calibration report. |
 | `eu_demand_monthly.csv` | Observed EU monthly gas demand 2019 – May 2026 (source of the seasonality factors and the demand-curve anchoring). |
 | `ttf_history.csv` | Historical TTF spot prices for calibration / validation reference. |
