@@ -51,6 +51,28 @@ MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
+def warm_start_from(prev_nodes, prev_realized, prev_q, new_nodes):
+    """Map the previous month's equilibrium onto the new subtree as a
+    Gauss-Seidel warm start: every new node inherits the previous solution
+    at the realized node of the same calendar time (the closest available
+    proxy -- counterfactual branches did not exist in the old tree under
+    the same ids). Blocked leaders are zeroed at closed nodes."""
+    by_t = {prev_nodes[nid].t: nid for nid in prev_realized}
+    q0 = {}
+    for L in m11.LEADERS:
+        q0[L] = {}
+        for r in REGIONS:
+            col = prev_q[L][r]
+            q0[L][r] = {}
+            for nid, node in new_nodes.items():
+                pnid = by_t.get(node.t)
+                v = col.get(pnid, 0.0) if pnid is not None else 0.0
+                if (not node.closure_open) and L in m11.BLOCKED_LEADERS:
+                    v = 0.0
+                q0[L][r][nid] = v
+    return q0
+
+
 def roll():
     t_script = time.time()
 
@@ -61,6 +83,7 @@ def roll():
     s_state = {r: storage[r]["S_init"] for r in REGIONS}
 
     trajectory = []   # one record per implemented month
+    prev_sol   = None   # (nodes, realized_ids, q_eq) of the previous roll
 
     for t0 in range(ROLL_START, ROLL_END + 1):
         open0 = realized_status(t0)
@@ -68,6 +91,8 @@ def roll():
 
         nodes, realized_ids = build_tree_from(t0, open0, *counts)
         ctx = m11.make_ctx(nodes, realized_ids, s_state)
+        q_init = (warm_start_from(*prev_sol, nodes)
+                  if prev_sol is not None else None)
 
         print(f"\n{'='*78}")
         print(f"ROLL t={t0:+d} ({MONTH_NAMES[calendar_month(t0)]}) "
@@ -78,7 +103,8 @@ def roll():
 
         q_eq, prices, profits, iters, stocks = m11.diagonalize(
             ctx=ctx, max_iter=ROLL_MAX_ITER, tol=0.5, alpha=0.5,
-            time_limit=ROLL_TIME_LIMIT, verbose=False)
+            time_limit=ROLL_TIME_LIMIT, verbose=False, q_init=q_init)
+        prev_sol = (nodes, realized_ids, q_eq)
 
         root_id = realized_ids[0]
         rec = {

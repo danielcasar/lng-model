@@ -389,6 +389,12 @@ def solve_leader(L, others_q, ctx=None, time_limit=180, mip_gap=3e-2):
     solver.options["MIPGap"]     = mip_gap
     solver.options["TimeLimit"]  = time_limit
     solver.options["OutputFlag"] = 0
+    # Prioritise FINDING feasible incumbents over proving optimality
+    # (Gurobi MIPFocus=1): the diagonalization only needs a good incumbent
+    # per iteration, and with the tightened Big-Ms (calibration v5) the
+    # time-limited solves otherwise sometimes terminate with no incumbent
+    # at all ("SOLVER FAILED" in the rolling log).
+    solver.options["MIPFocus"]   = 1
     results = solver.solve(m, tee=False, load_solutions=False)
     try:
         m.solutions.load_from(results)
@@ -410,10 +416,14 @@ def max_change(q_old, q_new, ctx=None):
                for L in LEADERS for r in REGIONS for nid in NODE_IDS)
 
 def diagonalize(ctx=None, max_iter=8, tol=0.5, alpha=0.4,
-                time_limit=180, verbose=True):
+                time_limit=180, verbose=True, q_init=None):
     ctx = ctx if ctx is not None else DEFAULT_CTX
     NODE_IDS, REALIZED_IDS = ctx["NODE_IDS"], ctx["REALIZED_IDS"]
-    q = init_quantities(ctx)
+    # Warm start: the rolling driver passes the previous month's equilibrium
+    # (mapped onto the new subtree) -- the equilibrium changes only
+    # incrementally between months, so this starts the Gauss-Seidel loop
+    # near the fixed point instead of at the crude capacity-share split.
+    q = q_init if q_init is not None else init_quantities(ctx)
     last_prices  = None
     last_profits = {}
     last_stocks  = None
