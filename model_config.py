@@ -162,13 +162,21 @@ pipeline = {
 # the crisis-displaced US volumes could not clear in Asia and were dumped
 # into the EU, crashing the model's EU price to EUR 19 while the observed
 # crisis TTF was EUR 42-57 (set by EU-Asia cargo competition).
+#
+# WTP grid REPOSITIONED (calibration v5): equilibrium prices snap to block
+# WTPs, so the grid must be dense in the OBSERVED clearing ranges. The v4
+# grid had no EU step between 36 and 47 -- both runs (one-shot RMSE 14.71,
+# rolling 14.50) cleared EU at exactly 47 pre-crisis (obs 33-38) and fell
+# through to <=36 in the crisis (obs 42-57); Asia winter snapped to 58
+# (obs 38). v5 keeps block counts and totals identical (no extra binaries)
+# but places steps at ~5 EUR spacing across EU 31-55 and Asia 34-60.
 # =============================================================================
 
 demand_blocks_base = {
-    "EU":   [(24.0, 120.0), (2.0, 88.0), (2.0, 78.0), (2.0, 68.0),
-             (2.0,  57.0), (2.0, 47.0), (2.0, 36.0), (2.0, 26.0), (2.0, 15.0)],
-    "Asia": [(30.0, 105.0), (2.0, 80.0), (2.0, 68.0), (2.0, 58.0),
-             (2.0,  48.0), (3.0, 40.0), (4.0, 33.0), (4.0, 27.0), (4.0, 22.0)],
+    "EU":   [(24.0, 120.0), (2.0, 80.0), (2.0, 65.0), (2.0, 55.0),
+             (2.0,  48.0), (2.0, 42.0), (2.0, 37.0), (2.0, 31.0), (2.0, 24.0)],
+    "Asia": [(30.0, 105.0), (2.0, 72.0), (2.0, 60.0), (2.0, 52.0),
+             (2.0,  45.0), (3.0, 39.0), (4.0, 34.0), (4.0, 28.0), (4.0, 23.0)],
 }
 
 # =============================================================================
@@ -186,9 +194,12 @@ EU_MONTH_FACTOR = {
 
 # Asia: flatter seasonality (Japan/Korea heating partially offset by flat
 # Chinese industrial demand) -- stylised two-level scheme.
+# Winter factor lowered 1.25 -> 1.10 (calibration v5): the observed JKM
+# winter premium 2025-26 was only ~+5-8% (EUR 38-39 winter vs ~36 autumn,
+# calibration_targets.csv); 1.25 pushed the winter marginal block to 58.
 WINTER = {11, 12, 1, 2, 3}
 SUMMER = {6, 7, 8}
-ASIA_WINTER_FACTOR = 1.25
+ASIA_WINTER_FACTOR = 1.10
 ASIA_SUMMER_FACTOR = 0.85
 
 # =============================================================================
@@ -237,9 +248,16 @@ EU_MAX_WITHDRAW_BCM = 25.0   # per month
 # M_PI / M_DUE must exceed the maximum plausible nodal price (incl.
 # scarcity spikes); M_X / M_D exceed the maximum monthly quantities;
 # M_STOCK exceeds S_max. No economic content.
+#
+# M_PI tightened 600 -> 150 and M_DUE 600 -> 250 (calibration v5): the
+# maximum WTP is 120, so no nodal price can exceed 120 and no stationarity
+# expression can exceed ~240. The loose 600 admitted phantom dual spikes
+# in low-probability counterfactual branches that financed hoarding /
+# Euler-violating storage paths in time-limited (aborted) solves, and it
+# weakened the LP relaxation, slowing every MIP solve.
 # =============================================================================
 
-M_X, M_D, M_PI, M_DUE, M_STOCK = 60.0, 60.0, 600.0, 600.0, 150.0
+M_X, M_D, M_PI, M_DUE, M_STOCK = 60.0, 60.0, 150.0, 250.0, 150.0
 
 # =============================================================================
 # ROLLING-HORIZON SETTINGS (12_rolling_epec.py)
