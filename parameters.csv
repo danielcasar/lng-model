@@ -47,27 +47,27 @@ Transport cost,Malaysia -> Asia,1.0,USD/MMBtu,Assumption,Round-number estimate,l
 Transport cost,Oman -> Asia,1.2,USD/MMBtu,Assumption,Round-number estimate,lng_data.py
 Transport cost,Other_Middle_East -> Asia,1.4,USD/MMBtu,Assumption,Round-number estimate,lng_data.py
 Transport cost,Other_Asia_Pacific -> Asia,1.6,USD/MMBtu,Assumption,Round-number estimate,lng_data.py
-Liquefaction capacity,USA,7.920 (= 18.35 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3; monthly bcm = annual x 27.8/12",lng_data.py
-Liquefaction capacity,Qatar,6.255 (= 14.49 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Other_Middle_East (UAE),0.277 (= 0.64 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Australia,5.040 (= 11.68 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Russia,3.060 (= 7.09 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Algeria,0.720 (= 1.67 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Indonesia,1.357 (= 3.14 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Malaysia,1.548 (= 3.59 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Nigeria,2.520 (= 5.84 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Oman,0.571 (= 1.32 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Other_Africa,3.600 (= 8.34 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Other_Americas,2.160 (= 5.00 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Other_Asia_Pacific,0.752 (= 1.74 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Other_Europe,0.310 (= 0.72 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
-Liquefaction capacity,Trinidad,0.612 (= 1.42 bcm/month),bn MMBtu/yr,Data,"Zwickl-Bernhard & Neumann (2024), Table 6 col. 3",lng_data.py
+Liquefaction capacity,USA,5.580 (= 12.92 bcm/month),bn MMBtu/yr,Data,"2026 OPERATIONAL capacity (GIIGNL Annual Report / IEA Gas Market Report, rounded); replaces ZB&N Table 6 which holds their 2040 scenario values (calibration v6). Monthly bcm = annual x 27.8/12",lng_data.py
+Liquefaction capacity,Qatar,3.810 (= 8.83 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Other_Middle_East (UAE),0.288 (= 0.67 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Australia,4.245 (= 9.83 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Russia,1.655 (= 3.83 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Algeria,0.647 (= 1.50 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Indonesia,1.079 (= 2.50 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Malaysia,1.367 (= 3.17 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Nigeria,1.079 (= 2.50 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Oman,0.540 (= 1.25 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Other_Africa,1.079 (= 2.50 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Other_Americas,0.719 (= 1.67 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Other_Asia_Pacific,0.719 (= 1.67 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Other_Europe,0.252 (= 0.58 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
+Liquefaction capacity,Trinidad,0.504 (= 1.17 bcm/month),bn MMBtu/yr,Data,"2026 operational capacity (GIIGNL / IEA; ZB&N Table 6 = 2040 values, replaced in v6)",lng_data.py
 Event,blocked suppliers (Hormuz closure),"Qatar, Oman, Other_Middle_East",-,Data,"All Hormuz-transiting LNG stranded: 93% of Qatari and 96% of UAE LNG shipments transit Hormuz; production (BEP) and untouched routes unchanged",lng_data.py
 Strategic leaders,LEADERS,"USA, Gulf",-,Assumption,"Two-leader EPEC; Gulf = composite of the Hormuz-stranded exporters (jointly ~20% of global LNG exports)",model_config.py
 Strategic leaders,GULF_MEMBERS,"Qatar, Other_Middle_East (UAE)",-,Assumption,"Both face identical blocking exposure (93%/96% Hormuz transit shares), so aggregation is the natural coalition",model_config.py
 Strategic leaders,Gulf delivered cost,= Qatar's delivered cost,EUR/MWh,Derived,"Capacity-weighted composite BEP differs by < $0.03/MMBtu from Qatar's (UAE ~4% of composite capacity)",11_epec_2leader.py
-Strategic leaders,leader capacity USA,18.35,bcm/month,Derived,From liquefaction capacity table above,11_epec_2leader.py
-Strategic leaders,leader capacity Gulf,15.13 (0 when strait closed),bcm/month,Derived,= Qatar 14.49 + UAE 0.64; zero at every CLOSED tree node,11_epec_2leader.py
+Strategic leaders,leader capacity USA,12.92,bcm/month,Derived,From liquefaction capacity table above,11_epec_2leader.py
+Strategic leaders,leader capacity Gulf,9.50 (0 when strait closed),bcm/month,Derived,= Qatar 8.83 + UAE 0.67; zero at every CLOSED tree node,11_epec_2leader.py
 Strategic leaders,CONTRACT_FLOOR USA,0.90,fraction of available capacity,Data,"US liquefaction ran at ~full utilisation through 2025-26 (EIA LNG export data); 'USA' aggregates many competing private exporters with individual dispatch incentives, so unified withholding power is small. Calibration v3",model_config.py
 Strategic leaders,CONTRACT_FLOOR Gulf,0.85,fraction of available capacity,Data,"QatarEnergy portfolio ~85% long-term contracted (GIIGNL Annual Report); only the residual is discretionary spot. Floor binds TOTAL dispatch, cross-basin allocation stays strategic. Calibration v3",model_config.py
 Fringe,SPOT_TRADABLE,1.00,fraction,Assumption,Full nameplate capacity spot-tradable (former Hypothesis H1 removed),model_config.py

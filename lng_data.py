@@ -126,11 +126,50 @@ EVENTS = {
 }
 
 # =============================================================================
-# Liquefaction capacities  (billion MMBtu / year)  — Table 6 (column 3)
+# Liquefaction capacities  (billion MMBtu / year)
 # Converted to bcm/month via BCM_PER_BILLION_MMBTU / 12.
+#
+# IMPORTANT (calibration v6): Zwickl-Bernhard & Neumann's Table 6 contains
+# capacities for their 2040 scenario year -- summing to ~1,020 bcm/yr,
+# roughly 55% above the real 2026 fleet (~650 bcm/yr). Using them made the
+# crisis toothless: the real pre-crisis market ran at ~98% LNG capacity
+# utilisation (Fulwood 2024, OIES NG 195, Fig. 4), with no spare capacity
+# to replace the stranded Gulf volumes, while the model had a 2040-sized
+# cushion. The model now uses 2026 OPERATIONAL capacities (GIIGNL Annual
+# Report / IEA Gas Market Report figures, rounded); the 2040 values are
+# kept below for reference.
 # =============================================================================
 
 LIQ_CAP_BN_MMBTU_YR = {
+    # bn MMBtu/yr  (= bcm/yr / 27.8)         2026 operational, bcm/yr
+    "Algeria":            0.647,   # ~18  (nameplate 34, feedgas-constrained)
+    "Australia":          4.245,   # ~118 (87.6 MTPA: NWS, Gorgon, Wheatstone,
+                                   #       Ichthys, APLNG, QCLNG, GLNG, Pluto...)
+    "Indonesia":          1.079,   # ~30  (Bontang, Tangguh)
+    "Malaysia":           1.367,   # ~38  (Bintulu, PFLNG)
+    "Nigeria":            1.079,   # ~30  nameplate (NLNG T1-6; feedgas-limited)
+    "Oman":               0.540,   # ~15
+    "Other_Africa":       1.079,   # ~30  (Angola, Egypt, Mozambique FLNG,
+                                   #       Senegal/Mauritania GTA, Eq. Guinea)
+    "Other_Americas":     0.719,   # ~20  (Peru, Mexico, LNG Canada ramping)
+    "Other_Asia_Pacific": 0.719,   # ~20  (PNG, Brunei)
+    "Other_Europe":       0.252,   # ~7   (Norway Hammerfest)
+    "Other_Middle_East":  0.288,   # ~8   (UAE Das Island)
+    "Qatar":              3.810,   # ~106 (77 MTPA, pre-NFE expansion)
+    "Russia":             1.655,   # ~46  (Yamal, Sakhalin-2, Arctic LNG-2
+                                   #       partial, Portovaya/Vysotsk)
+    "Trinidad":           0.504,   # ~14
+    "USA":                5.580,   # ~155 (Sabine Pass, Corpus Christi incl.
+                                   #       Stage 3, Freeport, Cameron,
+                                   #       Calcasieu Pass, Cove Point, Elba,
+                                   #       Plaquemines ramping)
+}
+# Sum: ~655 bcm/yr -- consistent with available 2026 capacity in Fulwood
+# (2026, OIES Comment, Fig. 1) and ~98% pre-crisis utilisation.
+
+# Zwickl-Bernhard & Neumann (2024) Table 6 col. 3 -- their 2040 scenario.
+# Kept for reference only; NOT used by the model since calibration v6.
+LIQ_CAP_BN_MMBTU_YR_2040 = {
     "Algeria":            0.720,
     "Australia":          5.040,
     "Indonesia":          1.357,
