@@ -142,8 +142,20 @@ def fringe_capacity(region, supplier, node):
     return fringe[region][supplier]["cap_closed" if not node.closure_open else "cap_open"]
 
 def block_size(region, block, t):
-    """Size of a demand block in a region at month t (bcm), seasonally scaled."""
-    return demand_blocks_base[region][block][0] * season_factor(region, t)
+    """Size of a demand block in a region at month t (bcm).
+
+    Seasonality applies ONLY to the essential (heating) block; the
+    price-response rungs (industry, power fuel-switching, storage-refill
+    competition) are flat across the year (calibration v6.2). Scaling the
+    whole staircase made the crisis summer both small AND cheap, which
+    collapsed expected prices and triggered storage dumping into the
+    closure months. With heating-only scaling the staircase reproduces
+    the observed totals exactly: EU winter 24*1.41+16 = 49.8 bcm (obs Jan
+    49), crisis summer 24*0.63+16 = 31.1 bcm (obs Apr-May 30-31)."""
+    size = demand_blocks_base[region][block][0]
+    if block == 0:
+        return size * season_factor(region, t)
+    return size
 
 def block_wtp(region, block):
     """Willingness to pay of a demand block in a region (EUR/MWh)."""

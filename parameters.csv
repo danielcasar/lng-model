@@ -103,7 +103,7 @@ Demand Asia,block 6,"(3.0, 46.0)","(bcm, EUR/MWh)",Calibrated,"Tail re-anchored 
 Demand Asia,block 7,"(4.0, 40.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 6,model_config.py
 Demand Asia,block 8,"(3.0, 32.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 6,model_config.py
 Demand Asia,block 9,"(3.0, 24.0)","(bcm, EUR/MWh)",Calibrated,See Asia block 6,model_config.py
-Seasonality EU,EU_MONTH_FACTOR Jan,1.41,multiplier on block sizes,Data,"Observed EU monthly gas demand 2023-2025 normalised to the annual mean (~28.2 bcm/month); source: eu_demand_monthly.csv (user-provided Eurostat-based series)",model_config.py
+Seasonality EU,EU_MONTH_FACTOR Jan,1.41,multiplier on the essential heating block ONLY (v6.2),Data,"Observed EU monthly gas demand 2023-2025 normalised to the annual mean (~28.2 bcm/month); source: eu_demand_monthly.csv (user-provided Eurostat-based series)",model_config.py
 Seasonality EU,EU_MONTH_FACTOR Feb,1.33,multiplier,Data,eu_demand_monthly.csv (as above),model_config.py
 Seasonality EU,EU_MONTH_FACTOR Mar,1.13,multiplier,Data,eu_demand_monthly.csv,model_config.py
 Seasonality EU,EU_MONTH_FACTOR Apr,0.87,multiplier,Data,eu_demand_monthly.csv,model_config.py
@@ -115,7 +115,7 @@ Seasonality EU,EU_MONTH_FACTOR Sep,0.78,multiplier,Data,eu_demand_monthly.csv,mo
 Seasonality EU,EU_MONTH_FACTOR Oct,0.96,multiplier,Data,eu_demand_monthly.csv,model_config.py
 Seasonality EU,EU_MONTH_FACTOR Nov,1.20,multiplier,Data,eu_demand_monthly.csv,model_config.py
 Seasonality EU,EU_MONTH_FACTOR Dec,1.70,multiplier,Data,eu_demand_monthly.csv,model_config.py
-Seasonality Asia,winter factor (Nov-Mar),1.10,multiplier,Assumption,"Flatter than EU: Japan/Korea heating partially offset by flat Chinese industrial demand",model_config.py
+Seasonality Asia,winter factor (Nov-Mar),1.10,multiplier on essential block only (v6.2),Assumption,"Flatter than EU: Japan/Korea heating partially offset by flat Chinese industrial demand",model_config.py
 Seasonality Asia,summer factor (Jun-Aug),0.85,multiplier,Assumption,As above,model_config.py
 Storage,EU S_max,100.0,bcm,Data,EU aggregate working gas volume ~100 bcm (GIE AGSI+),model_config.py
 Storage,EU S_init,85.0,bcm,Data,Observed EU storage fill at model start (Sep 2025) ~85% (GIE AGSI+),model_config.py
@@ -149,4 +149,4 @@ Strategic leaders,GULF_DAMAGE_FACTOR,0.91,capacity factor,Data,"Two damaged Ras 
 Storage,EU_NOV_TARGET_FRAC_2026,0.80,fraction of S_max,Data,"Crisis-year 1-Nov target: EU flexibility mechanism; Fulwood (2026, OIES) projects 76-81 bcm on 1 Nov 2026 -- the regular 90% is unattainable",model_config.py
 Calibration target,EU storage end-March 2026,30.0,bcm,Data,"EU-27 stocks 30 bcm at end of March 2026: 6 bcm lower y/y and 16 bcm below the 2022-25 end-March average (Fulwood 2026, OIES / GIE AGSI+)",model_config.py
 Pipeline,EU_other_supply -> EU,"cost 13.0, cap 9.0",EUR/MWh; bcm/month,Data,"Non-LNG supply aggregate (v6.1): EU domestic production ~3 + UK net flows ~2 + Azerbaijan TAP ~1 + Turkstream ~1.3 + Libya ~0.2 + biomethane ~1.5 (IEA Gas Market Report 2026). Needed because demand staircases are calibrated to TOTAL demand while the 2026 LNG fleet replaced the oversized 2040 capacities that had accidentally covered this supply",model_config.py
-Pipeline,Asia_other_supply -> Asia,"cost 12.0, cap 22.0",EUR/MWh; bcm/month,Data,"Non-LNG supply aggregate (v6.1): Chinese pipeline imports ~8 (Central Asia, Power of Siberia, Myanmar) + marginal domestic production of China/India/SE Asia serving the staircase consumers (IEA)",model_config.py
+Pipeline,Asia_other_supply -> Asia,"cost 12.0, cap 12.0",EUR/MWh; bcm/month,Data,"Non-LNG supply aggregate (v6.1): Chinese pipeline imports ~8 (Central Asia, Power of Siberia, Myanmar) + ~4 inflexible misc; marginal domestic production dropped in v6.2 -- it cannot surge into the seaborne spot market (IEA)",model_config.py

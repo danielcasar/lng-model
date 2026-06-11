@@ -163,16 +163,17 @@ ASIA_ACCESS = {
 #   EU_other_supply  ~9 bcm/month: EU domestic production ~3 (DE/IT/RO/
 #     DK/NL residual), UK net flows ~2, Azerbaijan TAP ~1, Turkstream
 #     ~1.3, Libya ~0.2, biomethane ~1.5  (IEA Gas Market Report 2026)
-#   Asia_other_supply ~22 bcm/month: Chinese pipeline imports ~8
-#     (Central Asia + Power of Siberia + Myanmar) plus the marginal
-#     domestic production of China/India/SE Asia that serves the same
-#     consumers as the demand staircase  (IEA)
+#   Asia_other_supply ~12 bcm/month (v6.2, was 22): Chinese pipeline
+#     imports ~8 (Central Asia + Power of Siberia + Myanmar) + ~4
+#     inflexible misc. The "marginal domestic production" component was
+#     dropped -- domestic Chinese/Indian production cannot surge into
+#     the seaborne spot market that the JKM staircase represents  (IEA)
 pipeline = {
     "EU":   {"Norway_pipe":  {"cost": 16.0, "cap_open": 10.0, "cap_closed": 10.0},
              "Algeria_pipe": {"cost": 20.0, "cap_open":  4.0, "cap_closed":  4.0},
              "EU_other_supply": {"cost": 13.0, "cap_open": 9.0, "cap_closed": 9.0}},
     "Asia": {"Sakhalin_pipe":{"cost": 16.0, "cap_open":  3.0, "cap_closed":  3.0},
-             "Asia_other_supply": {"cost": 12.0, "cap_open": 22.0, "cap_closed": 22.0}},
+             "Asia_other_supply": {"cost": 12.0, "cap_open": 12.0, "cap_closed": 12.0}},
 }
 
 # =============================================================================
