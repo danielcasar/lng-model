@@ -25,7 +25,7 @@ Rationale (vs. the one-shot tree solve in 11_epec_2leader.py):
     never-reached future are re-audited every month.
 
 Reuses the entire calibrated market model (demand staircase, fringe,
-contract floors, storage envelope, mandates) from 11_epec_2leader.py via
+contract floors, mandates) from 11_epec_2leader.py via
 its ctx-parameterized builders.
 """
 
@@ -57,19 +57,19 @@ def warm_start_from(prev_nodes, prev_realized, prev_q, new_nodes):
     at the realized node of the same calendar time (the closest available
     proxy -- counterfactual branches did not exist in the old tree under
     the same ids). Blocked leaders are zeroed at closed nodes."""
-    by_t = {prev_nodes[nid].t: nid for nid in prev_realized}
+    by_t = {prev_nodes[node_id].t: node_id for node_id in prev_realized}
     q0 = {}
-    for L in m11.LEADERS:
-        q0[L] = {}
-        for r in REGIONS:
-            col = prev_q[L][r]
-            q0[L][r] = {}
-            for nid, node in new_nodes.items():
-                pnid = by_t.get(node.t)
-                v = col.get(pnid, 0.0) if pnid is not None else 0.0
-                if (not node.closure_open) and L in m11.BLOCKED_LEADERS:
+    for leader in m11.LEADERS:
+        q0[leader] = {}
+        for region in REGIONS:
+            col = prev_q[leader][region]
+            q0[leader][region] = {}
+            for node_id, node in new_nodes.items():
+                prev_node_id = by_t.get(node.t)
+                v = col.get(prev_node_id, 0.0) if prev_node_id is not None else 0.0
+                if (not node.closure_open) and leader in m11.BLOCKED_LEADERS:
                     v = 0.0
-                q0[L][r][nid] = v
+                q0[leader][region][node_id] = v
     return q0
 
 
@@ -80,7 +80,7 @@ def roll():
     # reflected in build_tree_from semantics: counts passed are those AT
     # the root) and the calibrated initial storage levels.
     counts  = (ALPHA_C_PRIOR, BETA_C_PRIOR, ALPHA_R_PRIOR, BETA_R_PRIOR)
-    s_state = {r: storage[r]["S_init"] for r in REGIONS}
+    s_state = {region: storage[region]["S_init"] for region in REGIONS}
 
     trajectory = []   # one record per implemented month
     prev_sol   = None   # (nodes, realized_ids, q_eq) of the previous roll
@@ -128,7 +128,7 @@ def roll():
         # Roll the state forward: implemented storage becomes next initial
         # condition; beliefs update with the realized transition to t0+1.
         if stocks:
-            s_state = {r: max(0.0, stocks[r][root_id]) for r in REGIONS}
+            s_state = {region: max(0.0, stocks[region][root_id]) for region in REGIONS}
         if t0 < ROLL_END:
             child_realized = nodes[realized_ids[1]]
             counts = (child_realized.alpha_C, child_realized.beta_C,
