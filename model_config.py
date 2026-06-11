@@ -54,6 +54,14 @@ CAL_OFFSET = 2
 # BETA-BERNOULLI BAYESIAN PRIORS ON TRANSITION RATES
 # =============================================================================
 
+# The belief-driven premium this tree generates is the formalisation of
+# what Fulwood (2024, OIES NG 195) calls the "fear premium": in 2022 TTF
+# peaked on the FEAR of losing Russian gas and collapsed once the loss
+# became certain ("the sky hadn't fallen in") -- prices move on beliefs
+# about supply states, not only on realised supply. Our conjugate
+# updating reproduces exactly that decay of the premium as uncertainty
+# resolves.
+#
 # Prior on the closure-arrival rate: Beta(2, 40), mean 2/42 = 4.8%/month.
 # CALIBRATED TO THE OBSERVED PRE-CRISIS PREMIUM: TTF was flat at ~37
 # EUR/MWh through Jan-Feb 2026 -- the market priced essentially no
@@ -152,6 +160,14 @@ pipeline = {
 # =============================================================================
 # DEMAND STAIRCASES -- CALIBRATED TO OBSERVED DATA
 # (see calibration_targets.csv and eu_demand_monthly.csv)
+#
+# The block-WTP ladder follows the price-formation hypothesis of Fulwood
+# (2024, OIES NG 195): in a supply-short market the price is set not by
+# supply costs but by successive DEMAND RESPONSES -- coal/oil switching,
+# efficiency, behavioural change, industrial closures, and finally
+# rationing ("Panic!"). Each WTP block is one rung of that ladder; the
+# crisis moves the marginal block up the ladder exactly as his
+# multi-dimensional framework describes.
 #
 # EU: the observed (quantity, price) pairs straddling the closure imply a
 # steep inverse demand: (Jan26: 49 bcm at EUR 37) vs (Mar26: 35 bcm at
