@@ -44,9 +44,9 @@ from model_config import (
     SPOT_TRADABLE, EU_ACCESS, ASIA_ACCESS, pipeline,
     demand_blocks_base,
     EU_MONTH_FACTOR, WINTER, SUMMER, ASIA_WINTER_FACTOR, ASIA_SUMMER_FACTOR,
-    HOLDING_COST, storage, EU_NOV_TARGET_FRAC, EU_MAX_FILL,
+    HOLDING_COST, storage, EU_NOV_TARGET_FRAC,
     EU_MAX_INJECT_BCM, EU_MAX_WITHDRAW_BCM,
-    M_X, M_D, M_PI, M_DUE, M_STOCK,
+    M_FRINGE, M_DEMAND, M_PRICE, M_KKT, M_STORAGE,
 )
 
 # =============================================================================
@@ -105,19 +105,30 @@ def season_factor(r, t):
         if m in SUMMER: return ASIA_SUMMER_FACTOR
         return 1.00
 
-def cost(r, s):     return fringe[r][s]["cost"]
-def Xcap(r, s, node):
+def fringe_cost(r, s):
+    """Delivered cost of fringe supplier s into region r (EUR/MWh)."""
+    return fringe[r][s]["cost"]
+
+def fringe_capacity(r, s, node):
+    """Monthly capacity of fringe supplier s into region r at a tree node
+    (zero for Hormuz-blocked suppliers while the strait is closed)."""
     return fringe[r][s]["cap_closed" if not node.closure_open else "cap_open"]
-def Vcap(r, k, t):  return demand_blocks_base[r][k][0] * season_factor(r, t)
-def wtp(r, k):      return demand_blocks_base[r][k][1]
+
+def block_size(r, k, t):
+    """Size of demand block k in region r at month t (bcm), seasonally scaled."""
+    return demand_blocks_base[r][k][0] * season_factor(r, t)
+
+def block_wtp(r, k):
+    """Willingness to pay of demand block k in region r (EUR/MWh)."""
+    return demand_blocks_base[r][k][1]
 
 # =============================================================================
 # BUILD SCENARIO TREE (shared across both leaders)
 # =============================================================================
 
-REGIONS  = ("EU", "Asia")
-S_by_r   = {r: list(fringe[r].keys()) for r in REGIONS}
-K_by_r   = {r: list(range(len(demand_blocks_base[r]))) for r in REGIONS}
+REGIONS           = ("EU", "Asia")
+FRINGE_BY_REGION  = {r: list(fringe[r].keys()) for r in REGIONS}
+BLOCKS_BY_REGION  = {r: list(range(len(demand_blocks_base[r]))) for r in REGIONS}
 EU_NOV_MIN = EU_NOV_TARGET_FRAC * storage["EU"]["S_max"]    # Reg 2017/1938: 90% Nov-1 target
 
 def make_ctx(nodes, realized_ids, s_init):
@@ -166,191 +177,225 @@ def build_leader_mpcc(L, others_q, ctx=None):
 
     m = pyo.ConcreteModel(f"MPCC_{L}_stochastic")
 
-    m.R  = pyo.Set(initialize=list(REGIONS))
-    m.N  = pyo.Set(initialize=NODE_IDS)
-    m.RS = pyo.Set(initialize=[(r, s) for r in REGIONS for s in S_by_r[r]], dimen=2)
-    m.RK = pyo.Set(initialize=[(r, k) for r in REGIONS for k in K_by_r[r]], dimen=2)
+    m.R  = pyo.Set(initialize=list(REGIONS))                # regions
+    m.N  = pyo.Set(initialize=NODE_IDS)                     # scenario-tree nodes
+    m.RS = pyo.Set(initialize=[(r, s) for r in REGIONS      # (region, fringe supplier)
+                               for s in FRINGE_BY_REGION[r]], dimen=2)
+    m.RK = pyo.Set(initialize=[(r, k) for r in REGIONS      # (region, demand block)
+                               for k in BLOCKS_BY_REGION[r]], dimen=2)
 
-    # Leader's decision: q[r, n] (bounded to 0 if region not accessible)
-    def _q_bounds(mdl, r, nid):
+    # Leader's decision: supply to region r at node n (0 if not accessible)
+    def _supply_bounds(mdl, r, nid):
         if r in accessible: return (0, None)
         return (0, 0)
-    m.q = pyo.Var(m.R, m.N, domain=pyo.NonNegativeReals, bounds=_q_bounds)
+    m.leader_supply = pyo.Var(m.R, m.N, domain=pyo.NonNegativeReals,
+                              bounds=_supply_bounds)
 
-    # Followers' primal vars (per node)
-    m.x     = pyo.Var(m.RS, m.N, domain=pyo.NonNegativeReals)
-    m.d     = pyo.Var(m.RK, m.N, domain=pyo.NonNegativeReals)
-    m.stock = pyo.Var(m.R,  m.N, domain=pyo.NonNegativeReals)
-    m.flow  = pyo.Var(m.R,  m.N, domain=pyo.Reals)
+    # Followers' primal variables (per node)
+    m.fringe_supply = pyo.Var(m.RS, m.N, domain=pyo.NonNegativeReals)  # bcm from each price-taking supplier
+    m.demand_served = pyo.Var(m.RK, m.N, domain=pyo.NonNegativeReals)  # bcm delivered to each demand block
+    m.storage_level = pyo.Var(m.R,  m.N, domain=pyo.NonNegativeReals)  # end-of-month stock (bcm)
+    m.storage_flow  = pyo.Var(m.R,  m.N, domain=pyo.Reals)             # injection (+) / withdrawal (-)
 
-    # Followers' duals
-    m.pi  = pyo.Var(m.R,  m.N, domain=pyo.NonNegativeReals)
-    m.lam = pyo.Var(m.RS, m.N, domain=pyo.NonNegativeReals)
-    m.mu  = pyo.Var(m.RK, m.N, domain=pyo.NonNegativeReals)
-    m.eta = pyo.Var(m.R,  m.N, domain=pyo.NonNegativeReals)
+    # Followers' dual variables
+    m.price           = pyo.Var(m.R,  m.N, domain=pyo.NonNegativeReals)  # market-clearing price (EUR/MWh)
+    m.fringe_cap_rent = pyo.Var(m.RS, m.N, domain=pyo.NonNegativeReals)  # scarcity rent on fringe capacity
+    m.block_cap_rent  = pyo.Var(m.RK, m.N, domain=pyo.NonNegativeReals)  # rent on demand-block saturation
+    m.storage_cap_rent= pyo.Var(m.R,  m.N, domain=pyo.NonNegativeReals)  # rent on full storage
 
-    # Binaries for Big-M complementarity
-    m.b_x     = pyo.Var(m.RS, m.N, domain=pyo.Binary)
-    m.b_d     = pyo.Var(m.RK, m.N, domain=pyo.Binary)
-    m.b_xcap  = pyo.Var(m.RS, m.N, domain=pyo.Binary)
-    m.b_dcap  = pyo.Var(m.RK, m.N, domain=pyo.Binary)
-    m.b_pi    = pyo.Var(m.R,  m.N, domain=pyo.Binary)
-    m.b_stock = pyo.Var(m.R,  m.N, domain=pyo.Binary)
-    m.b_eta   = pyo.Var(m.R,  m.N, domain=pyo.Binary)
+    # Binary switches for the Fortuny-Amat Big-M complementarity pairs
+    m.is_fringe_active = pyo.Var(m.RS, m.N, domain=pyo.Binary)  # fringe supply > 0
+    m.is_block_served  = pyo.Var(m.RK, m.N, domain=pyo.Binary)  # block demand > 0
+    m.is_fringe_at_cap = pyo.Var(m.RS, m.N, domain=pyo.Binary)  # fringe capacity binding
+    m.is_block_at_cap  = pyo.Var(m.RK, m.N, domain=pyo.Binary)  # block fully served
+    m.is_market_tight  = pyo.Var(m.R,  m.N, domain=pyo.Binary)  # market balance binding (price > 0)
+    m.is_storage_held  = pyo.Var(m.R,  m.N, domain=pyo.Binary)  # stock > 0 (Euler condition binding)
+    m.is_storage_full  = pyo.Var(m.R,  m.N, domain=pyo.Binary)  # storage at S_max
 
     # Leader capacity per node
-    def _leader_cap(mdl, nid):
-        return sum(mdl.q[r, nid] for r in accessible) <= leader_cap_at_node(L, NODES[nid])
-    m.lcap = pyo.Constraint(m.N, rule=_leader_cap)
+    def _leader_capacity(mdl, nid):
+        return (sum(mdl.leader_supply[r, nid] for r in accessible)
+                <= leader_cap_at_node(L, NODES[nid]))
+    m.leader_capacity = pyo.Constraint(m.N, rule=_leader_capacity)
 
     # Per-leader delivery floor: share of capacity that is NOT strategically
     # withholdable (see CONTRACT_FLOOR in model_config.py). Binds total
     # dispatch, so cross-basin arbitrage stays strategic; zero when blocked.
     def _leader_floor(mdl, nid):
-        return (sum(mdl.q[r, nid] for r in accessible)
+        return (sum(mdl.leader_supply[r, nid] for r in accessible)
                 >= CONTRACT_FLOOR[L] * leader_cap_at_node(L, NODES[nid]))
-    m.lcap_floor = pyo.Constraint(m.N, rule=_leader_floor)
+    m.leader_floor = pyo.Constraint(m.N, rule=_leader_floor)
 
-    # Market balance per node (leader's own q + OTHER leader's q + fringe x = demand + storage flow)
-    def _balance(mdl, r, nid):
-        return (sum(mdl.d[r, k, nid] for k in K_by_r[r]) + mdl.flow[r, nid]
-                <= mdl.q[r, nid] + others_q[r].get(nid, 0.0)
-                   + sum(mdl.x[r, s, nid] for s in S_by_r[r]))
-    m.balance = pyo.Constraint(m.R, m.N, rule=_balance)
+    # Market balance per node:
+    #   demand served + storage injection <= own supply + other leader's
+    #   supply + fringe supply
+    def _market_balance(mdl, r, nid):
+        return (sum(mdl.demand_served[r, k, nid] for k in BLOCKS_BY_REGION[r])
+                + mdl.storage_flow[r, nid]
+                <= mdl.leader_supply[r, nid] + others_q[r].get(nid, 0.0)
+                   + sum(mdl.fringe_supply[r, s, nid] for s in FRINGE_BY_REGION[r]))
+    m.market_balance = pyo.Constraint(m.R, m.N, rule=_market_balance)
 
-    m.xcap = pyo.Constraint(m.RS, m.N,
-        rule=lambda mdl, r, s, nid: mdl.x[r, s, nid] <= Xcap(r, s, NODES[nid]))
-    m.dcap = pyo.Constraint(m.RK, m.N,
-        rule=lambda mdl, r, k, nid: mdl.d[r, k, nid] <= Vcap(r, k, NODES[nid].t))
+    m.fringe_cap = pyo.Constraint(m.RS, m.N,
+        rule=lambda mdl, r, s, nid:
+            mdl.fringe_supply[r, s, nid] <= fringe_capacity(r, s, NODES[nid]))
+    m.block_cap = pyo.Constraint(m.RK, m.N,
+        rule=lambda mdl, r, k, nid:
+            mdl.demand_served[r, k, nid] <= block_size(r, k, NODES[nid].t))
 
     def _storage_balance(mdl, r, nid):
         node = NODES[nid]
         if node.parent_id == "":
             prev = S_INIT[r]
         else:
-            prev = mdl.stock[r, node.parent_id]
-        return mdl.stock[r, nid] == prev + mdl.flow[r, nid]
+            prev = mdl.storage_level[r, node.parent_id]
+        return mdl.storage_level[r, nid] == prev + mdl.storage_flow[r, nid]
     m.storage_balance = pyo.Constraint(m.R, m.N, rule=_storage_balance)
 
     m.storage_cap = pyo.Constraint(m.R, m.N,
-        rule=lambda mdl, r, nid: mdl.stock[r, nid] <= storage[r]["S_max"])
-
-    # Observed cycling envelope (EU only): end-of-month fill may not exceed
-    # the historical maximum for that calendar month (AGSI+, see above).
-    def _cycling_envelope(mdl, r, nid):
-        if r != "EU": return pyo.Constraint.Skip
-        frac = EU_MAX_FILL[calendar_month(NODES[nid].t)]
-        if frac >= 1.0: return pyo.Constraint.Skip
-        return mdl.stock[r, nid] <= frac * storage[r]["S_max"]
-    m.cycling_env = pyo.Constraint(m.R, m.N, rule=_cycling_envelope)
+        rule=lambda mdl, r, nid:
+            mdl.storage_level[r, nid] <= storage[r]["S_max"])
 
     # Physical deliverability limits (EU only): injection and withdrawal
     # rates bounded by GIE aggregate technical capacity.
-    def _flow_limits_up(mdl, r, nid):
+    def _inject_limit(mdl, r, nid):
         if r != "EU": return pyo.Constraint.Skip
-        return mdl.flow[r, nid] <= EU_MAX_INJECT_BCM
-    m.flow_up = pyo.Constraint(m.R, m.N, rule=_flow_limits_up)
-    def _flow_limits_dn(mdl, r, nid):
+        return mdl.storage_flow[r, nid] <= EU_MAX_INJECT_BCM
+    m.inject_limit = pyo.Constraint(m.R, m.N, rule=_inject_limit)
+    def _withdraw_limit(mdl, r, nid):
         if r != "EU": return pyo.Constraint.Skip
-        return mdl.flow[r, nid] >= -EU_MAX_WITHDRAW_BCM
-    m.flow_dn = pyo.Constraint(m.R, m.N, rule=_flow_limits_dn)
+        return mdl.storage_flow[r, nid] >= -EU_MAX_WITHDRAW_BCM
+    m.withdraw_limit = pyo.Constraint(m.R, m.N, rule=_withdraw_limit)
 
-    def _terminal(mdl, r, nid):
+    def _terminal_storage(mdl, r, nid):
         if nid not in TERMINAL_NODE_IDS: return pyo.Constraint.Skip
-        return mdl.stock[r, nid] == storage[r]["S_term"]
-    m.terminal = pyo.Constraint(m.R, m.N, rule=_terminal)
+        return mdl.storage_level[r, nid] == storage[r]["S_term"]
+    m.terminal_storage = pyo.Constraint(m.R, m.N, rule=_terminal_storage)
 
-    def _nov(mdl, nid):
+    def _nov_mandate(mdl, nid):
         if nid not in NOV_TARGETS_EU_NODES: return pyo.Constraint.Skip
-        return mdl.stock["EU", nid] >= EU_NOV_MIN
-    m.eu_nov = pyo.Constraint(m.N, rule=_nov)
+        return mdl.storage_level["EU", nid] >= EU_NOV_MIN
+    m.nov_mandate = pyo.Constraint(m.N, rule=_nov_mandate)
 
-    # KKT stationarity
-    m.stat_x = pyo.Constraint(m.RS, m.N,
+    # KKT stationarity conditions of the followers' market-clearing problem:
+    #   fringe:  delivered cost + capacity rent >= price
+    #            (equality whenever the supplier dispatches)
+    #   demand:  price + saturation rent >= willingness to pay
+    #            (equality whenever the block consumes)
+    m.kkt_fringe = pyo.Constraint(m.RS, m.N,
         rule=lambda mdl, r, s, nid:
-            cost(r, s) + mdl.lam[r, s, nid] - mdl.pi[r, nid] >= 0)
-    m.stat_d = pyo.Constraint(m.RK, m.N,
+            fringe_cost(r, s) + mdl.fringe_cap_rent[r, s, nid]
+            - mdl.price[r, nid] >= 0)
+    m.kkt_demand = pyo.Constraint(m.RK, m.N,
         rule=lambda mdl, r, k, nid:
-            mdl.pi[r, nid] + mdl.mu[r, k, nid] - wtp(r, k) >= 0)
+            mdl.price[r, nid] + mdl.block_cap_rent[r, k, nid]
+            - block_wtp(r, k) >= 0)
 
-    def _stat_stock(mdl, r, nid):
-        node = NODES[nid]
-        if not node.children: return pyo.Constraint.Skip
+    # Storage Euler condition on tree edges:
+    #   price today >= E[price next month] - storage-cap rent - holding cost
+    #   (equality whenever stock is held, i.e. intertemporal arbitrage)
+    def _expected_next_price(mdl, r, node):
         total_child_prob = sum(NODES[c].cum_prob / node.cum_prob for c in node.children) \
                            if node.cum_prob > 0 else 1.0
-        expected_pi_next = sum((NODES[c].cum_prob / node.cum_prob if node.cum_prob > 0 else 0)
-                               * mdl.pi[r, c] for c in node.children) / max(total_child_prob, 1e-9)
-        return mdl.pi[r, nid] - expected_pi_next + mdl.eta[r, nid] + HOLDING_COST >= 0
-    m.stat_stock = pyo.Constraint(m.R, m.N, rule=_stat_stock)
+        return sum((NODES[c].cum_prob / node.cum_prob if node.cum_prob > 0 else 0)
+                   * mdl.price[r, c] for c in node.children) / max(total_child_prob, 1e-9)
 
-    # Fortuny-Amat Big-M complementarity
-    m.compl_x_a = pyo.Constraint(m.RS, m.N,
-        rule=lambda mdl, r, s, nid: mdl.x[r, s, nid] <= M_X * mdl.b_x[r, s, nid])
-    m.compl_x_b = pyo.Constraint(m.RS, m.N,
-        rule=lambda mdl, r, s, nid:
-            cost(r, s) + mdl.lam[r, s, nid] - mdl.pi[r, nid]
-            <= M_DUE * (1 - mdl.b_x[r, s, nid]))
-
-    m.compl_d_a = pyo.Constraint(m.RK, m.N,
-        rule=lambda mdl, r, k, nid: mdl.d[r, k, nid] <= M_D * mdl.b_d[r, k, nid])
-    m.compl_d_b = pyo.Constraint(m.RK, m.N,
-        rule=lambda mdl, r, k, nid:
-            mdl.pi[r, nid] + mdl.mu[r, k, nid] - wtp(r, k)
-            <= M_DUE * (1 - mdl.b_d[r, k, nid]))
-
-    m.compl_xcap_a = pyo.Constraint(m.RS, m.N,
-        rule=lambda mdl, r, s, nid: mdl.lam[r, s, nid] <= M_PI * mdl.b_xcap[r, s, nid])
-    m.compl_xcap_b = pyo.Constraint(m.RS, m.N,
-        rule=lambda mdl, r, s, nid:
-            Xcap(r, s, NODES[nid]) - mdl.x[r, s, nid]
-            <= M_X * (1 - mdl.b_xcap[r, s, nid]))
-
-    m.compl_dcap_a = pyo.Constraint(m.RK, m.N,
-        rule=lambda mdl, r, k, nid: mdl.mu[r, k, nid] <= M_PI * mdl.b_dcap[r, k, nid])
-    m.compl_dcap_b = pyo.Constraint(m.RK, m.N,
-        rule=lambda mdl, r, k, nid:
-            Vcap(r, k, NODES[nid].t) - mdl.d[r, k, nid]
-            <= M_D * (1 - mdl.b_dcap[r, k, nid]))
-
-    def _compl_pi_b(mdl, r, nid):
-        node = NODES[nid]
-        slack = (mdl.q[r, nid] + others_q[r].get(nid, 0.0)
-                 + sum(mdl.x[r, s, nid] for s in S_by_r[r])
-                 - sum(mdl.d[r, k, nid] for k in K_by_r[r]) - mdl.flow[r, nid])
-        big = (leader_cap_at_node(L, node) + others_q[r].get(nid, 0.0)
-               + sum(Xcap(r, s, node) for s in S_by_r[r]) + M_STOCK + 10.0)
-        return slack <= big * (1 - mdl.b_pi[r, nid])
-    m.compl_pi_a = pyo.Constraint(m.R, m.N,
-        rule=lambda mdl, r, nid: mdl.pi[r, nid] <= M_PI * mdl.b_pi[r, nid])
-    m.compl_pi_b = pyo.Constraint(m.R, m.N, rule=_compl_pi_b)
-
-    def _compl_stock_a(mdl, r, nid):
-        if not NODES[nid].children: return pyo.Constraint.Skip
-        return mdl.stock[r, nid] <= M_STOCK * mdl.b_stock[r, nid]
-    m.compl_stock_a = pyo.Constraint(m.R, m.N, rule=_compl_stock_a)
-
-    def _compl_stock_b(mdl, r, nid):
+    def _kkt_storage(mdl, r, nid):
         node = NODES[nid]
         if not node.children: return pyo.Constraint.Skip
-        expected_pi_next = sum((NODES[c].cum_prob / node.cum_prob if node.cum_prob > 0 else 0)
-                               * mdl.pi[r, c] for c in node.children) \
-                           / max(sum(NODES[c].cum_prob / node.cum_prob for c in node.children)
-                                 if node.cum_prob > 0 else 1.0, 1e-9)
-        return (mdl.pi[r, nid] - expected_pi_next + mdl.eta[r, nid] + HOLDING_COST) \
-               <= M_DUE * (1 - mdl.b_stock[r, nid])
-    m.compl_stock_b = pyo.Constraint(m.R, m.N, rule=_compl_stock_b)
+        return (mdl.price[r, nid] - _expected_next_price(mdl, r, node)
+                + mdl.storage_cap_rent[r, nid] + HOLDING_COST >= 0)
+    m.kkt_storage = pyo.Constraint(m.R, m.N, rule=_kkt_storage)
 
-    m.compl_eta_a = pyo.Constraint(m.R, m.N,
-        rule=lambda mdl, r, nid: mdl.eta[r, nid] <= M_PI * mdl.b_eta[r, nid])
-    m.compl_eta_b = pyo.Constraint(m.R, m.N,
+    # Fortuny-Amat Big-M complementarity: each KKT inequality pairs with its
+    # primal slack -- at most one of the two may be strictly positive, which
+    # the binary switch enforces.
+
+    # Fringe dispatches only if price covers cost (and vice versa)
+    m.compl_fringe_a = pyo.Constraint(m.RS, m.N,
+        rule=lambda mdl, r, s, nid:
+            mdl.fringe_supply[r, s, nid]
+            <= M_FRINGE * mdl.is_fringe_active[r, s, nid])
+    m.compl_fringe_b = pyo.Constraint(m.RS, m.N,
+        rule=lambda mdl, r, s, nid:
+            fringe_cost(r, s) + mdl.fringe_cap_rent[r, s, nid] - mdl.price[r, nid]
+            <= M_KKT * (1 - mdl.is_fringe_active[r, s, nid]))
+
+    # A block consumes only if its WTP covers the price (and vice versa)
+    m.compl_demand_a = pyo.Constraint(m.RK, m.N,
+        rule=lambda mdl, r, k, nid:
+            mdl.demand_served[r, k, nid]
+            <= M_DEMAND * mdl.is_block_served[r, k, nid])
+    m.compl_demand_b = pyo.Constraint(m.RK, m.N,
+        rule=lambda mdl, r, k, nid:
+            mdl.price[r, nid] + mdl.block_cap_rent[r, k, nid] - block_wtp(r, k)
+            <= M_KKT * (1 - mdl.is_block_served[r, k, nid]))
+
+    # Fringe capacity rent flows only when capacity is exhausted
+    m.compl_fringe_cap_a = pyo.Constraint(m.RS, m.N,
+        rule=lambda mdl, r, s, nid:
+            mdl.fringe_cap_rent[r, s, nid]
+            <= M_PRICE * mdl.is_fringe_at_cap[r, s, nid])
+    m.compl_fringe_cap_b = pyo.Constraint(m.RS, m.N,
+        rule=lambda mdl, r, s, nid:
+            fringe_capacity(r, s, NODES[nid]) - mdl.fringe_supply[r, s, nid]
+            <= M_FRINGE * (1 - mdl.is_fringe_at_cap[r, s, nid]))
+
+    # Block saturation rent flows only when the block is fully served
+    m.compl_block_cap_a = pyo.Constraint(m.RK, m.N,
+        rule=lambda mdl, r, k, nid:
+            mdl.block_cap_rent[r, k, nid]
+            <= M_PRICE * mdl.is_block_at_cap[r, k, nid])
+    m.compl_block_cap_b = pyo.Constraint(m.RK, m.N,
+        rule=lambda mdl, r, k, nid:
+            block_size(r, k, NODES[nid].t) - mdl.demand_served[r, k, nid]
+            <= M_DEMAND * (1 - mdl.is_block_at_cap[r, k, nid]))
+
+    # Positive price only when the market balance is binding (no spare supply)
+    def _compl_price_b(mdl, r, nid):
+        node = NODES[nid]
+        spare_supply = (mdl.leader_supply[r, nid] + others_q[r].get(nid, 0.0)
+                        + sum(mdl.fringe_supply[r, s, nid] for s in FRINGE_BY_REGION[r])
+                        - sum(mdl.demand_served[r, k, nid] for k in BLOCKS_BY_REGION[r])
+                        - mdl.storage_flow[r, nid])
+        big = (leader_cap_at_node(L, node) + others_q[r].get(nid, 0.0)
+               + sum(fringe_capacity(r, s, node) for s in FRINGE_BY_REGION[r])
+               + M_STORAGE + 10.0)
+        return spare_supply <= big * (1 - mdl.is_market_tight[r, nid])
+    m.compl_price_a = pyo.Constraint(m.R, m.N,
         rule=lambda mdl, r, nid:
-            storage[r]["S_max"] - mdl.stock[r, nid]
-            <= M_STOCK * (1 - mdl.b_eta[r, nid]))
+            mdl.price[r, nid] <= M_PRICE * mdl.is_market_tight[r, nid])
+    m.compl_price_b = pyo.Constraint(m.R, m.N, rule=_compl_price_b)
+
+    # Stock is held only when the Euler condition holds with equality
+    def _compl_storage_a(mdl, r, nid):
+        if not NODES[nid].children: return pyo.Constraint.Skip
+        return mdl.storage_level[r, nid] <= M_STORAGE * mdl.is_storage_held[r, nid]
+    m.compl_storage_a = pyo.Constraint(m.R, m.N, rule=_compl_storage_a)
+
+    def _compl_storage_b(mdl, r, nid):
+        node = NODES[nid]
+        if not node.children: return pyo.Constraint.Skip
+        return (mdl.price[r, nid] - _expected_next_price(mdl, r, node)
+                + mdl.storage_cap_rent[r, nid] + HOLDING_COST
+                <= M_KKT * (1 - mdl.is_storage_held[r, nid]))
+    m.compl_storage_b = pyo.Constraint(m.R, m.N, rule=_compl_storage_b)
+
+    # Storage-cap rent flows only when storage is full
+    m.compl_full_a = pyo.Constraint(m.R, m.N,
+        rule=lambda mdl, r, nid:
+            mdl.storage_cap_rent[r, nid] <= M_PRICE * mdl.is_storage_full[r, nid])
+    m.compl_full_b = pyo.Constraint(m.R, m.N,
+        rule=lambda mdl, r, nid:
+            storage[r]["S_max"] - mdl.storage_level[r, nid]
+            <= M_STORAGE * (1 - mdl.is_storage_full[r, nid]))
 
     # Leader's objective: expected probability-weighted profit
+    #   sum over nodes of P(node) x (price - delivered cost) x own supply
     m.obj = pyo.Objective(
         sense=pyo.maximize,
-        expr=sum(NODES[nid].cum_prob * (m.pi[r, nid] - leader_cost[L][r]) * m.q[r, nid]
+        expr=sum(NODES[nid].cum_prob
+                 * (m.price[r, nid] - leader_cost[L][r]) * m.leader_supply[r, nid]
                  for r in accessible for nid in NODE_IDS))
 
     return m
@@ -401,9 +446,12 @@ def solve_leader(L, others_q, ctx=None, time_limit=180, mip_gap=3e-2):
     except Exception:
         return None, None, None, None
     try:
-        q_new  = {r: {nid: max(0.0, pyo.value(m.q[r, nid])) for nid in NODE_IDS} for r in REGIONS}
-        prices = {r: {nid: pyo.value(m.pi[r, nid]) for nid in NODE_IDS} for r in REGIONS}
-        stocks = {r: {nid: pyo.value(m.stock[r, nid]) for nid in NODE_IDS} for r in REGIONS}
+        q_new  = {r: {nid: max(0.0, pyo.value(m.leader_supply[r, nid]))
+                      for nid in NODE_IDS} for r in REGIONS}
+        prices = {r: {nid: pyo.value(m.price[r, nid])
+                      for nid in NODE_IDS} for r in REGIONS}
+        stocks = {r: {nid: pyo.value(m.storage_level[r, nid])
+                      for nid in NODE_IDS} for r in REGIONS}
         profit = pyo.value(m.obj)
     except Exception:
         return None, None, None, None
@@ -514,7 +562,7 @@ if __name__ == "__main__":
     final_solver.options["TimeLimit"]  = 300
     final_solver.options["OutputFlag"] = 0
     final_solver.solve(final_m, tee=False)
-    s_eu = {nid: pyo.value(final_m.stock["EU", nid]) for nid in REALIZED_IDS}
+    s_eu = {nid: pyo.value(final_m.storage_level["EU", nid]) for nid in REALIZED_IDS}
 
     print("\nRealized-path equilibrium prices, dispatches, and EU storage:")
     print("(Gulf = Qatar + UAE composite leader)")

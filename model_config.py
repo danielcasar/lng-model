@@ -222,19 +222,13 @@ storage = {
 # storage-filling target on 1 November, applied at every realized Nov node.
 EU_NOV_TARGET_FRAC = 0.90
 
-# Observed EU storage cycling envelope (calibration v4): maximum observed
-# end-of-month fill fraction over ~10 years of GIE AGSI+ data. EU storage
-# has NEVER stayed near-full through late winter in any observed year --
-# shippers sell winter volumes forward and contracted cycling forces
-# seasonal release. Without this envelope the MPCC selects a hoarding
-# equilibrium (storage held at ~100% all winter sustaining high prices,
-# dumped only at the terminal nodes outside the reported window) because
-# among the degenerate follower-optimal storage paths the single-level
-# reformulation picks the leader-preferred one.
-EU_MAX_FILL = {   # calendar month -> max end-of-month fill fraction
-    1: 0.80, 2: 0.70, 3: 0.62, 4: 0.68, 5: 0.78, 6: 0.88,
-    7: 0.94, 8: 0.98, 9: 1.00, 10: 1.00, 11: 1.00, 12: 0.92,
-}
+# NOTE: the v4 "storage cycling envelope" (month-specific max-fill bounds
+# from AGSI+ data) was REMOVED in v6 as too restrictive: seasonal storage
+# release should emerge endogenously from the price arbitrage (Euler
+# condition). The hoarding equilibrium it guarded against is now addressed
+# by the tightened price Big-M (no phantom dual spikes financing the
+# hoard) and by the rolling-horizon re-solving (plans whose payoff lives
+# in never-reached futures are re-audited monthly).
 
 # Physical injection / withdrawal deliverability limits (GIE aggregate
 # technical capacity, EU-wide): prevents pathological storage jumps such
@@ -245,19 +239,21 @@ EU_MAX_WITHDRAW_BCM = 25.0   # per month
 # =============================================================================
 # NUMERICS -- Fortuny-Amat & McCarl (1981) Big-M complementarity constants
 #
-# M_PI / M_DUE must exceed the maximum plausible nodal price (incl.
-# scarcity spikes); M_X / M_D exceed the maximum monthly quantities;
-# M_STOCK exceeds S_max. No economic content.
-#
-# M_PI tightened 600 -> 150 and M_DUE 600 -> 250 (calibration v5): the
-# maximum WTP is 120, so no nodal price can exceed 120 and no stationarity
-# expression can exceed ~240. The loose 600 admitted phantom dual spikes
-# in low-probability counterfactual branches that financed hoarding /
-# Euler-violating storage paths in time-limited (aborted) solves, and it
-# weakened the LP relaxation, slowing every MIP solve.
+# Each constant must safely exceed the largest value the bounded quantity
+# can take -- no economic content. M_PRICE tightened 600 -> 150 and M_KKT
+# 600 -> 250 (calibration v5): the maximum WTP is 120, so no nodal price
+# can exceed 120 and no stationarity expression can exceed ~240. The loose
+# 600 admitted phantom dual spikes in low-probability counterfactual
+# branches that financed hoarding / Euler-violating storage paths in
+# time-limited (aborted) solves, and it weakened the LP relaxation,
+# slowing every MIP solve.
 # =============================================================================
 
-M_X, M_D, M_PI, M_DUE, M_STOCK = 60.0, 60.0, 150.0, 250.0, 150.0
+M_FRINGE  = 60.0    # > max fringe supply per (region, supplier, month), bcm
+M_DEMAND  = 60.0    # > max demand-block size, bcm
+M_PRICE   = 150.0   # > max possible market price (max WTP = 120 EUR/MWh)
+M_KKT     = 250.0   # > max value of any KKT stationarity expression
+M_STORAGE = 150.0   # > max storage level (EU S_max = 100 bcm)
 
 # =============================================================================
 # ROLLING-HORIZON SETTINGS (12_rolling_epec.py)

@@ -123,7 +123,6 @@ Storage,EU S_term,30.0,bcm,Assumption,"Typical end-of-winter EU storage level, i
 Storage,Asia S_max / S_init / S_term,20 / 10 / 10,bcm,Assumption,"Stylised: NE-Asian LNG tank capacity is small relative to EU underground storage",model_config.py
 Storage,EU_NOV_TARGET_FRAC,0.90 (=> EU_NOV_MIN 90 bcm),fraction of S_max,Data,"EU Regulation 2017/1938 as amended by Reg. (EU) 2022/1032: 90% storage-filling target on 1 November, applied at every realized November node",model_config.py
 Storage,HOLDING_COST,0.10,EUR/MWh-month,Assumption,Constant physical storage holding cost,model_config.py
-Storage,EU_MAX_FILL Jan-Dec,"0.80, 0.70, 0.62, 0.68, 0.78, 0.88, 0.94, 0.98, 1.00, 1.00, 1.00, 0.92",max end-of-month fill fraction,Data,"Maximum observed end-of-month EU fill fraction per calendar month over ~10 years of GIE AGSI+ data (calibration v4): EU storage has never stayed near-full through late winter; prevents the hoarding equilibrium the optimistic MPCC selection otherwise picks",model_config.py
 Storage,EU_MAX_INJECT_BCM,12.0,bcm/month,Data,GIE aggregate technical injection capacity (EU-wide),model_config.py
 Storage,EU_MAX_WITHDRAW_BCM,25.0,bcm/month,Data,GIE aggregate technical withdrawal capacity (EU-wide),model_config.py
 Calibration target,t=-5 Sep 2025 (TTF / JKM),33.0 / 36.0,EUR/MWh,Data,"Observed front-month TTF and JKM monthly averages (JKM converted USD/MMBtu -> EUR/MWh); see calibration_targets.csv; market reports LSEG/ICE/Platts via press, retrieved June 2026",calibration_targets.csv
@@ -136,7 +135,7 @@ Calibration target,t=+1 Mar 2026 (closure),57.0 / 63.0,EUR/MWh,Data,"TTF +55% in
 Calibration target,t=+2 Apr 2026,42.0 / 55.5,EUR/MWh,Data,"Ceasefire-expectation dip (belief-driven; the open/closed information structure cannot reproduce it endogenously -- documented model limitation)",calibration_targets.csv
 Calibration target,t=+3 May 2026,46.0 / 57.0,EUR/MWh,Data,As above (re-escalation),calibration_targets.csv
 Calibration target,t=+4 Jun 2026,49.6 / 59.5,EUR/MWh,Data,"TTF EUR 49.6; JKM $18.75/MMBtu converted",calibration_targets.csv
-Numerics,Big-M (M_X / M_D / M_PI / M_DUE / M_STOCK),60 / 60 / 150 / 250 / 150,bcm or EUR/MWh,Numerical,"Fortuny-Amat & McCarl (1981) disjunctive linearisation of KKT complementarity; M_PI must exceed the maximum plausible nodal price (incl. scarcity spikes), M_X/M_D exceed max monthly quantities, M_STOCK exceeds S_max",model_config.py
+Numerics,Big-M (M_FRINGE / M_DEMAND / M_PRICE / M_KKT / M_STORAGE),60 / 60 / 150 / 250 / 150,bcm or EUR/MWh,Numerical,"Fortuny-Amat & McCarl (1981) disjunctive linearisation of KKT complementarity; M_PRICE must exceed the maximum plausible nodal price (max WTP 120), M_FRINGE/M_DEMAND exceed max monthly quantities, M_KKT exceeds any stationarity expression, M_STORAGE exceeds S_max",model_config.py
 Numerics,Gurobi NonConvex,2,-,Numerical,Bilinear leader objective pi*q -> nonconvex MIQCP,11_epec_2leader.py
 Numerics,MIPGap (diagonalization iterations),0.03,relative gap,Numerical,"Loose 3% gap during iterations: the damped update only uses the best response directionally; final storage-extraction solve uses a tighter gap",11_epec_2leader.py
 Numerics,TimeLimit per leader solve,180 (one-shot) / 120 (rolling),seconds,Numerical,Solver wall-time cap per MPCC,11_epec_2leader.py / model_config.py
