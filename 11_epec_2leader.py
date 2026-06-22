@@ -48,7 +48,7 @@ from model_config import (
     HOLDING_COST, storage, STORAGE_FLOOR_FRAC,
     EU_NOV_TARGET_FRAC, EU_NOV_TARGET_FRAC_2026,
     NOV_2026_T, STORAGE_TARGETS_EU, LNG_AVAILABILITY,
-    ESCALATION_LOSS_FRAC,
+    ESCALATION_LOSS_FRAC, REROUTE_RATE_PER_MONTH, REROUTE_CAP,
     EU_MAX_INJECT_BCM, EU_MAX_WITHDRAW_BCM,
     M_FRINGE, M_DEMAND, M_PRICE, M_KKT, M_STORAGE,
 )
@@ -83,6 +83,29 @@ def _escalation_factor(node):
     """Extra LNG-supply derating applied at ESCALATED nodes (1.0 elsewhere)."""
     return (1.0 - ESCALATION_LOSS_FRAC) if getattr(node, "escalated", False) else 1.0
 
+def _months_closed(node):
+    """Trailing consecutive closed months up to and including this node."""
+    n = 0
+    for (_, open_) in reversed(node.history):
+        if open_:
+            break
+        n += 1
+    return n
+
+def _reroute_factor(node):
+    """Realized crisis-deepening derate (model_config v9): effective seaborne-
+    LNG deliverability falls the longer the strait stays shut -- combined
+    realized re-escalation (calibration_targets.csv) and shipping/rerouting
+    fleet tie-up (Fulwood 2026, OIES). Open nodes unaffected; capped."""
+    if node.closure_open:
+        return 1.0
+    return 1.0 - min(REROUTE_CAP, REROUTE_RATE_PER_MONTH * _months_closed(node))
+
+def _lng_supply_factor(node):
+    """Combined seaborne-LNG derate at a node: counterfactual escalation tail
+    x realized duration-dependent reroute drag."""
+    return _escalation_factor(node) * _reroute_factor(node)
+
 # =============================================================================
 # LEADER COSTS AND CAPACITIES
 # =============================================================================
@@ -113,7 +136,7 @@ def leader_cap_at_node(leader, node):
     happened keep full capacity. An escalation removes a further
     fraction of every non-blocked leader's LNG supply."""
     if leader not in BLOCKED_LEADERS:
-        return _escalation_factor(node) * _LEADER_CAP_BASE[leader]
+        return _lng_supply_factor(node) * _LEADER_CAP_BASE[leader]
     if not node.closure_open:
         return 0.0
 
@@ -159,7 +182,7 @@ def fringe_capacity(region, supplier, node):
     suppliers further derated at escalated nodes, pipelines unaffected)."""
     cap = fringe[region][supplier]["cap_closed" if not node.closure_open else "cap_open"]
     if supplier not in PIPELINE_KEYS[region]:
-        cap *= _escalation_factor(node)
+        cap *= _lng_supply_factor(node)
     return cap
 
 def block_size(region, block, t):

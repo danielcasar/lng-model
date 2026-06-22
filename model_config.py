@@ -102,8 +102,49 @@ BETA_R_PRIOR  = 12.0
 # path, so there is nothing to learn; it represents a persistent structural
 # tail risk. Abstract first cut -- both knobs to be anchored to Fulwood's
 # structural ("12-month") scenario once the mechanism is validated.
-ESCALATION_RATE      = 0.05   # fixed monthly P(closed -> escalated)
-ESCALATION_LOSS_FRAC = 0.15   # extra fraction of LNG supply removed if escalated
+ESCALATION_RATE      = 0.10   # fixed monthly P(closed -> escalated)
+ESCALATION_LOSS_FRAC = 0.25   # extra fraction of LNG supply removed if escalated
+
+# PERSISTENCE (v9.1): a one-period escalation leaf is too myopic to reward
+# precautionary storage -- the agent would have to value stock for a single
+# month only, so it never refills against the tail. Making escalation an
+# ABSORBING multi-month state (it persists from the month it strikes to the
+# end of the horizon, supply staying depressed) gives gas carried INTO the
+# crisis a repeated, high-WTP payoff in the bad branch, which is what makes
+# pre-/early-crisis storage REFILL economic -- matching the observed EU
+# behaviour (storage rose 30->46 bcm Mar-Jun 2026 despite the closure).
+# Economically this is the standard precautionary-inventory motive against a
+# persistent disaster state (Wachter & Zhu 2025, QE, "rare disasters").
+ESCALATION_PERSIST = True     # escalated state absorbs to T_LAST (vs 1-month leaf)
+
+# =============================================================================
+# REALIZED CRISIS-DEEPENING DERATE -- duration-dependent seaborne-LNG loss (v9)
+# =============================================================================
+# The escalation state above is COUNTERFACTUAL (a priced-in tail that is never
+# realized). The realized closure path, by contrast, treated every closed month
+# as equally severe -- so the model's crisis prices SAGGED into the low-demand
+# summer while the OBSERVED crisis prices ROSE (Apr ceasefire dip, then May-Jun
+# re-escalation). We add a realized derate that grows with the number of months
+# the strait has been shut: a closed node loses an extra REROUTE_RATE_PER_MONTH
+# x (months closed so far) fraction of seaborne LNG (leaders + LNG fringe; NOT
+# pipelines/domestic), capped at REROUTE_CAP. Combined rationale:
+#   - REALIZED RE-ESCALATION: the crisis actually deepened over the spring
+#     (calibration_targets.csv: "moderation after ceasefire" -> "re-escalation
+#     creep"); a flat-severity closure cannot reproduce the rising profile.
+#   - SHIPPING / REROUTING DRAG: a prolonged closure ties up the global LNG
+#     fleet on longer (Cape-route) voyages and depletes floating inventory, so
+#     EFFECTIVE deliverable volume keeps falling the longer it lasts
+#     (Fulwood 2026, OIES, HormuzClosureGasFlows).
+# Like the escalation knobs, the EXISTENCE/direction is sourced; the MAGNITUDE
+# (rate, cap) is the calibration lever. No sourced volume or price is altered.
+# Rate cut 0.10 -> 0.03 (v9.1) once PERSISTENT escalation was added: the
+# precautionary-refill it triggers raises crisis prices on its own (injection
+# competes with demand for scarce supply), so the realized derate now only adds
+# a small residual drag. Combined (persistent escalation + reroute 0.03) the
+# realized-path price RMSE falls to ~3.9 EUR/MWh and storage REFILLS through the
+# crisis (Mar-Jun) as observed, instead of hugging the 30% floor.
+REROUTE_RATE_PER_MONTH = 0.03   # extra seaborne-LNG loss per month-closed
+REROUTE_CAP            = 0.30   # maximum cumulative derate
 
 # =============================================================================
 # STRATEGIC LEADERS
@@ -320,11 +361,41 @@ EU_NOV_TARGET_FRAC = 0.90
 EU_NOV_TARGET_FRAC_2026 = 0.80
 NOV_2026_T = +8             # tree month of the crisis-year 1-Nov checkpoint
 
-# Observed EU storage calibration targets (end-of-month stocks, bcm):
-# end-March 2026 EU-27 stocks were 30 bcm -- 6 bcm lower year-on-year and
-# 16 bcm below the 2022-25 end-March average (Fulwood 2026, OIES / GIE
-# AGSI+). Reported against the model's realized-path storage trajectory.
-STORAGE_TARGETS_EU = {+1: 30.0}
+# Observed end-of-month EU storage (bcm, working-gas; model S_max = 100 scale).
+# Reported alongside the model's realized-path storage trajectory so the
+# storage behaviour can be eyeballed against reality, not only the prices.
+#
+# Values on a ~100 bcm working-gas basis (1% fill ~ 1 bcm), the same scale as
+# S_max=100 and consistent with the firm 30 bcm = 30% end-March anchor. Series
+# compiled from GIE AGSI+ -derived public sources (ACER winter 2025/26 report;
+# Bruegel gas tracker; CEEnergyNews/AGSI+; OIES/Fulwood 2026; AGSI+ live
+# mirrors), retrieved Jun 2026 -- exact daily AGSI+ readouts need a (free) API
+# key, so the non-anchor months carry the confidence flags below.
+# Confidence:
+#   FIRM      : t=-2 Dec 2025 (63%, AGSI+/CEEnergyNews); t=+1 Mar 2026 (30 bcm =
+#               30%, OIES/Fulwood 2026, corroborated by ACER "below 30%").
+#   PROJECTION: t=+8 1-Nov-2026 78 bcm (= end-Oct stock; Fulwood 2026 proj.
+#               76-81; the model's 80% Nov mandate targets 80).
+#   APPROX    : Sep-Nov 2025 (ACER "~82% end-summer, withdrawals from mid-Nov");
+#               Apr-Jun 2026 (ACER "1 Apr close to last year ~30%"; Bruegel
+#               ~37% late-May; AGSI+ live ~40%->46% over June, injection season).
+#   ESTIMATE  : Jan-Feb 2026 interpolated on the steep cold-Q1 withdrawal path
+#               between the firm Dec (63%) and Mar (30%) anchors (+-4 pp).
+STORAGE_OBS_EU = {
+    -5: 83.0,   # Sep 2025  approx (ACER/S&P ~83% end-summer)
+    -4: 82.0,   # Oct 2025  approx (ACER ~82%, withdrawals from mid-Nov)
+    -3: 80.0,   # Nov 2025  approx (peak ~82% drawing from mid-Nov)
+    -2: 63.0,   # Dec 2025  FIRM   (AGSI+/CEEnergyNews "finished 2025 at 63%")
+    -1: 48.0,   # Jan 2026  est.   (interp. cold-Q1 withdrawal path)
+     0: 38.0,   # Feb 2026  est.   (interp.; heading into the 30% pre-Hormuz low)
+    +1: 30.0,   # Mar 2026  FIRM   (Fulwood 2026 / AGSI+ / ACER)
+    +2: 31.0,   # Apr 2026  approx (ACER "1 Apr close to last year"; trough)
+    +3: 37.0,   # May 2026  approx (Bruegel ~37% late-May, lowest seasonal level)
+    +4: 46.0,   # Jun 2026  approx (AGSI+ live ~40%->46% over June)
+    +8: 78.0,   # 1 Nov 2026 snapshot (= end-Oct stock; Fulwood 2026 proj. 76-81)
+}
+# Back-compat alias: the single firm crisis anchor used by older reports.
+STORAGE_TARGETS_EU = {+1: STORAGE_OBS_EU[+1]}
 
 # NOTE: the v4 "storage cycling envelope" (month-specific max-fill bounds
 # from AGSI+ data) was REMOVED in v6 as too restrictive: seasonal storage

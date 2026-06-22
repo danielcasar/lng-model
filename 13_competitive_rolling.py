@@ -40,7 +40,7 @@ from model_config import (
     ROLL_START, ROLL_END,
     HOLDING_COST, storage, STORAGE_FLOOR_FRAC,
     EU_NOV_TARGET_FRAC, EU_NOV_TARGET_FRAC_2026,
-    NOV_2026_T, STORAGE_TARGETS_EU,
+    NOV_2026_T, STORAGE_TARGETS_EU, STORAGE_OBS_EU,
     EU_MAX_INJECT_BCM, EU_MAX_WITHDRAW_BCM,
     LEADERS, LEADER_REGIONS, CONTRACT_FLOOR,
 )
@@ -256,35 +256,80 @@ def report(trajectory, total_secs):
     rmse = (sq_err / max(n_obs, 1)) ** 0.5
     print("-" * 70)
     print(f"RMSE over {n_obs} observations: {rmse:.2f} EUR/MWh")
-    for t_obs, s_obs in sorted(STORAGE_TARGETS_EU.items()):
-        rec_obs = next((x for x in trajectory if x["t"] == t_obs), None)
-        if rec_obs is not None:
-            print(f"Storage check t={t_obs:+d}: model S_EU={rec_obs['S_EU']:.1f} bcm "
-                  f"vs observed {s_obs:.1f} bcm (GIE AGSI+ / Fulwood 2026)")
+
+    # EU storage: model realized-path trajectory vs observed (GIE AGSI+ /
+    # Fulwood 2026). RMSE over the months for which an observation exists.
+    print("\n" + "=" * 70)
+    print("EU STORAGE: model vs observed (bcm, working-gas)")
+    print("=" * 70)
+    print(f"{'t':>3} {'mo':>6}  {'S_model':>8} {'S_obs':>7} {'d':>6}")
+    s_sq, s_n = 0.0, 0
+    for rec in trajectory:
+        s_obs = STORAGE_OBS_EU.get(rec["t"])
+        if s_obs is None:
+            print(f"{rec['t']:>+3d} {rec['month']:>6}  {rec['S_EU']:>8.1f} "
+                  f"{'--':>7} {'--':>6}")
+        else:
+            print(f"{rec['t']:>+3d} {rec['month']:>6}  {rec['S_EU']:>8.1f} "
+                  f"{s_obs:>7.1f} {rec['S_EU']-s_obs:>+6.1f}")
+            s_sq += (rec["S_EU"] - s_obs) ** 2
+            s_n  += 1
+    s_rmse = (s_sq / max(s_n, 1)) ** 0.5
+    print("-" * 70)
+    print(f"Storage RMSE over {s_n} observed months: {s_rmse:.2f} bcm")
     print(f"Total computing time: {total_secs:.1f} s "
           f"({len(trajectory)} monthly re-solves)", flush=True)
 
-    save_results(trajectory, TARGETS, rmse)
+    save_results(trajectory, TARGETS, rmse, s_rmse)
 
 
-def save_results(trajectory, targets, rmse):
+def save_results(trajectory, targets, rmse, s_rmse=None):
     """Persist the rolled trajectory + calibration to results/ as CSV."""
     out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
     os.makedirs(out_dir, exist_ok=True)
 
     # 1. Full realized-path trajectory (prices, leader dispatch, storage).
+    #    S_EU_obs = observed end-of-month EU storage where known (else blank).
     traj_path = os.path.join(out_dir, "competitive_trajectory.csv")
     with open(traj_path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["t", "month", "status", "p_EU", "p_Asia",
                     "qUSA_EU", "qUSA_Asia", "qGulf_EU", "qGulf_Asia",
-                    "S_EU", "S_Asia"])
+                    "S_EU", "S_EU_obs", "S_Asia"])
         for r in trajectory:
+            s_obs = STORAGE_OBS_EU.get(r["t"])
             w.writerow([r["t"], r["month"], "OPEN" if r["open"] else "CLOSED",
                         round(r["p_EU"], 2), round(r["p_AS"], 2),
                         round(r["qUSA_EU"], 2), round(r["qUSA_AS"], 2),
                         round(r["qGLF_EU"], 2), round(r["qGLF_AS"], 2),
-                        round(r["S_EU"], 1), round(r["S_AS"], 1)])
+                        round(r["S_EU"], 1),
+                        "" if s_obs is None else round(s_obs, 1),
+                        round(r["S_AS"], 1)])
+
+    # 1b. Dedicated EU storage comparison (model vs observed, observed months).
+    stor_path = os.path.join(out_dir, "competitive_storage.csv")
+    with open(stor_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["t", "month", "S_EU_model", "S_EU_obs", "dS_EU", "source"])
+        for r in trajectory:
+            s_obs = STORAGE_OBS_EU.get(r["t"])
+            if s_obs is None:
+                continue
+            if r["t"] == +1:
+                src = "Fulwood2026/AGSI+ (firm)"
+            elif r["t"] == -2:
+                src = "AGSI+/CEEnergyNews (firm)"
+            elif r["t"] == +8:
+                src = "Fulwood2026 proj."
+            elif r["t"] in (-1, 0):
+                src = "AGSI+ interp. (est.)"
+            else:
+                src = "GIE AGSI+ (approx.)"
+            w.writerow([r["t"], r["month"], round(r["S_EU"], 1), round(s_obs, 1),
+                        round(r["S_EU"] - s_obs, 1), src])
+        if s_rmse is not None:
+            w.writerow([])
+            w.writerow(["storage_RMSE_bcm", round(s_rmse, 2)])
 
     # 2. Calibration table: model vs observed over the target window.
     cal_path = os.path.join(out_dir, "competitive_calibration.csv")
@@ -302,8 +347,8 @@ def save_results(trajectory, targets, rmse):
         w.writerow([])
         w.writerow(["RMSE_EUR_per_MWh", round(rmse, 2)])
     print(f"Results written to {os.path.relpath(out_dir)}/ "
-          f"(competitive_trajectory.csv, competitive_calibration.csv)",
-          flush=True)
+          f"(competitive_trajectory.csv, competitive_calibration.csv, "
+          f"competitive_storage.csv)", flush=True)
 
 
 if __name__ == "__main__":

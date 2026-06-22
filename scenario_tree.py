@@ -41,7 +41,7 @@ from model_config import (
     T_FIRST, T_PRE_END, T_CLOSURE_START, T_CLOSURE_END,
     T_POST_START, T_LAST, CAL_OFFSET,
     ALPHA_C_PRIOR, BETA_C_PRIOR, ALPHA_R_PRIOR, BETA_R_PRIOR,
-    ESCALATION_RATE,
+    ESCALATION_RATE, ESCALATION_PERSIST,
 )
 
 def calendar_month(t):
@@ -106,9 +106,10 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
     realized_ids = []
 
     def add_node(t, closure_open, parent_id, history, edge_prob,
-                 a_C, b_C, a_R, b_R, escalated=False):
-        h_signature = "".join("O" if h[1] else "C" for h in history)
-        node_id = f"t{t:+d}_{h_signature}" + ("E" if escalated else "")
+                 a_C, b_C, a_R, b_R, escalated=False, node_id=None):
+        if node_id is None:
+            h_signature = "".join("O" if h[1] else "C" for h in history)
+            node_id = f"t{t:+d}_{h_signature}" + ("E" if escalated else "")
         if node_id in nodes:
             return nodes[node_id]
         parent_cum = nodes[parent_id].cum_prob if parent_id else 1.0
@@ -160,11 +161,24 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
                            open_prob,  *open_counts)
         n_close = add_node(t, False, prev_id, parent.history + ((t, False),),
                            close_prob, *close_counts)
-        # Escalation branch: a counterfactual deeper-disruption leaf hung off
-        # every CLOSED node (the downside the closed state otherwise lacks).
-        if not parent.closure_open:
-            add_node(t, False, prev_id, parent.history + ((t, False),),
-                     p_esc, *close_counts, escalated=True)
+        # Escalation branch: a counterfactual deeper-disruption hung off every
+        # CLOSED node (the downside the closed state otherwise lacks). With
+        # ESCALATION_PERSIST it is an ABSORBING multi-month state -- the
+        # disruption strikes at month t and persists (supply depressed) to the
+        # horizon, so gas carried into the crisis pays off repeatedly in the
+        # bad branch (precautionary-refill incentive). Otherwise a 1-month leaf.
+        if not parent.closure_open and p_esc > 0.0:
+            if ESCALATION_PERSIST:
+                chain_parent, chain_hist, edge = prev_id, parent.history, p_esc
+                for tt in range(t, T_LAST + 1):
+                    chain_hist = chain_hist + ((tt, False),)
+                    n_esc = add_node(tt, False, chain_parent, chain_hist,
+                                     edge, *close_counts, escalated=True,
+                                     node_id=f"esc{t:+d}_t{tt:+d}")
+                    chain_parent, edge = n_esc.node_id, 1.0   # absorbing
+            else:
+                add_node(t, False, prev_id, parent.history + ((t, False),),
+                         p_esc, *close_counts, escalated=True)
 
         nxt = n_open if realized_status(t) else n_close
         prev_id = nxt.node_id
