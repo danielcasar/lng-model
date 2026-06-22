@@ -84,6 +84,28 @@ ALPHA_R_PRIOR = 2.0
 BETA_R_PRIOR  = 12.0
 
 # =============================================================================
+# ESCALATION (downside) STATE -- two-sided closure uncertainty (v8)
+# =============================================================================
+# The two-state open/closed chain is one-sidedly OPTIMISTIC: from the closed
+# state the only exit is reopening (supply returns, price falls), so the
+# expected future price during a closure can only decline and no scarcity
+# premium or upward price drift can form. We add an abstract ESCALATION
+# state reachable only from the closed state, in which the disruption DEEPENS
+# -- an additional fraction of global LNG supply is removed (a second
+# chokepoint, a wider conflict, damaged trains). It is NEVER realized on the
+# observed path; it exists purely as the downside branch agents price in.
+# Its presence raises the expected future price at closed nodes, and because
+# the reopening belief decays month-to-month (beta_R grows) the escalation
+# tail gains relative weight as the closure persists -- producing a premium
+# that RISES the longer the strait stays shut. The escalation hazard is a
+# FIXED parameter, not Bayesian-updated: escalation is never observed on the
+# path, so there is nothing to learn; it represents a persistent structural
+# tail risk. Abstract first cut -- both knobs to be anchored to Fulwood's
+# structural ("12-month") scenario once the mechanism is validated.
+ESCALATION_RATE      = 0.05   # fixed monthly P(closed -> escalated)
+ESCALATION_LOSS_FRAC = 0.15   # extra fraction of LNG supply removed if escalated
+
+# =============================================================================
 # STRATEGIC LEADERS
 #
 # The second strategic leader is a COMPOSITE of the Hormuz-transiting Gulf

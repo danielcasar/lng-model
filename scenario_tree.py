@@ -41,6 +41,7 @@ from model_config import (
     T_FIRST, T_PRE_END, T_CLOSURE_START, T_CLOSURE_END,
     T_POST_START, T_LAST, CAL_OFFSET,
     ALPHA_C_PRIOR, BETA_C_PRIOR, ALPHA_R_PRIOR, BETA_R_PRIOR,
+    ESCALATION_RATE,
 )
 
 def calendar_month(t):
@@ -65,7 +66,7 @@ class TreeNode:
     """
     node_id:      str
     t:            int
-    closure_open: bool          # True if OPEN at this t, False if CLOSED
+    closure_open: bool          # True if OPEN at this t, False if CLOSED/ESCALATED
     history:      tuple         # tuple of (t, status) pairs from root to here
     parent_id:    str
     cum_prob:     float         # unconditional probability of reaching this node
@@ -75,6 +76,7 @@ class TreeNode:
     alpha_R: float
     beta_R:  float
     children: list = field(default_factory=list)
+    escalated: bool = False     # True if this is a (deeper-disruption) ESCALATED node
 
 # =============================================================================
 # TREE CONSTRUCTION
@@ -104,9 +106,9 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
     realized_ids = []
 
     def add_node(t, closure_open, parent_id, history, edge_prob,
-                 a_C, b_C, a_R, b_R):
+                 a_C, b_C, a_R, b_R, escalated=False):
         h_signature = "".join("O" if h[1] else "C" for h in history)
-        node_id = f"t{t:+d}_{h_signature}"
+        node_id = f"t{t:+d}_{h_signature}" + ("E" if escalated else "")
         if node_id in nodes:
             return nodes[node_id]
         parent_cum = nodes[parent_id].cum_prob if parent_id else 1.0
@@ -115,7 +117,7 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
             history=history, parent_id=parent_id,
             cum_prob=parent_cum * edge_prob,
             alpha_C=a_C, beta_C=b_C, alpha_R=a_R, beta_R=b_R,
-            children=[],
+            children=[], escalated=escalated,
         )
         nodes[node_id] = n
         if parent_id and node_id not in nodes[parent_id].children:
@@ -144,9 +146,11 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
             close_counts = (parent.alpha_C + 1.0, parent.beta_C,
                             parent.alpha_R,       parent.beta_R)
         else:
-            # From CLOSED: event = reopening (rate p_R)
+            # From CLOSED: reopening (rate p_R) OR escalation (fixed hazard).
+            # The closed state retains probability 1 - p_R - p_esc.
             p_event = beta_mean(parent.alpha_R, parent.beta_R)
-            open_prob,  close_prob  = p_event, 1.0 - p_event
+            p_esc   = min(ESCALATION_RATE, max(0.0, 1.0 - p_event - 1e-6))
+            open_prob,  close_prob  = p_event, 1.0 - p_event - p_esc
             open_counts  = (parent.alpha_C, parent.beta_C,
                             parent.alpha_R + 1.0, parent.beta_R)
             close_counts = (parent.alpha_C, parent.beta_C,
@@ -156,6 +160,11 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
                            open_prob,  *open_counts)
         n_close = add_node(t, False, prev_id, parent.history + ((t, False),),
                            close_prob, *close_counts)
+        # Escalation branch: a counterfactual deeper-disruption leaf hung off
+        # every CLOSED node (the downside the closed state otherwise lacks).
+        if not parent.closure_open:
+            add_node(t, False, prev_id, parent.history + ((t, False),),
+                     p_esc, *close_counts, escalated=True)
 
         nxt = n_open if realized_status(t) else n_close
         prev_id = nxt.node_id

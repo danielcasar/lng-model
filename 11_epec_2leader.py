@@ -48,6 +48,7 @@ from model_config import (
     HOLDING_COST, storage, STORAGE_FLOOR_FRAC,
     EU_NOV_TARGET_FRAC, EU_NOV_TARGET_FRAC_2026,
     NOV_2026_T, STORAGE_TARGETS_EU, LNG_AVAILABILITY,
+    ESCALATION_LOSS_FRAC,
     EU_MAX_INJECT_BCM, EU_MAX_WITHDRAW_BCM,
     M_FRINGE, M_DEMAND, M_PRICE, M_KKT, M_STORAGE,
 )
@@ -73,6 +74,14 @@ fringe = {
     "EU":   {**pipeline["EU"],   **lng_EU_fringe},
     "Asia": {**pipeline["Asia"], **lng_Asia_fringe},
 }
+
+# Pipeline / non-LNG-aggregate fringe keys per region: these are NOT affected
+# by an escalation (which removes seaborne LNG, not pipeline or domestic gas).
+PIPELINE_KEYS = {r: set(pipeline[r].keys()) for r in ("EU", "Asia")}
+
+def _escalation_factor(node):
+    """Extra LNG-supply derating applied at ESCALATED nodes (1.0 elsewhere)."""
+    return (1.0 - ESCALATION_LOSS_FRAC) if getattr(node, "escalated", False) else 1.0
 
 # =============================================================================
 # LEADER COSTS AND CAPACITIES
@@ -101,9 +110,10 @@ def leader_cap_at_node(leader, node):
     reopening the restart is gradual (Fulwood 2026, OIES): ~50% in the
     first open month, ~91% thereafter (two damaged Ras Laffan trains
     offline beyond the horizon). Branches on which no closure ever
-    happened keep full capacity."""
+    happened keep full capacity. An escalation removes a further
+    fraction of every non-blocked leader's LNG supply."""
     if leader not in BLOCKED_LEADERS:
-        return _LEADER_CAP_BASE[leader]
+        return _escalation_factor(node) * _LEADER_CAP_BASE[leader]
     if not node.closure_open:
         return 0.0
 
@@ -145,8 +155,12 @@ def fringe_cost(region, supplier):
 
 def fringe_capacity(region, supplier, node):
     """Monthly capacity of a fringe supplier into a region at a tree node
-    (zero for Hormuz-blocked suppliers while the strait is closed)."""
-    return fringe[region][supplier]["cap_closed" if not node.closure_open else "cap_open"]
+    (zero for Hormuz-blocked suppliers while the strait is closed; LNG
+    suppliers further derated at escalated nodes, pipelines unaffected)."""
+    cap = fringe[region][supplier]["cap_closed" if not node.closure_open else "cap_open"]
+    if supplier not in PIPELINE_KEYS[region]:
+        cap *= _escalation_factor(node)
+    return cap
 
 def block_size(region, block, t):
     """Size of a demand block in a region at month t (bcm).
