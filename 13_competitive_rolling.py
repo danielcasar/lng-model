@@ -36,7 +36,8 @@ from scenario_tree import (
 )
 from model_config import (
     ROLL_START, ROLL_END,
-    HOLDING_COST, storage, EU_NOV_TARGET_FRAC, EU_NOV_TARGET_FRAC_2026,
+    HOLDING_COST, storage, STORAGE_FLOOR_FRAC,
+    EU_NOV_TARGET_FRAC, EU_NOV_TARGET_FRAC_2026,
     NOV_2026_T, STORAGE_TARGETS_EU,
     EU_MAX_INJECT_BCM, EU_MAX_WITHDRAW_BCM,
     LEADERS, LEADER_REGIONS, CONTRACT_FLOOR,
@@ -117,6 +118,13 @@ def build_welfare_lp(ctx):
     m.storage_cap = pyo.Constraint(m.R, m.N,
         rule=lambda mdl, region, nid:
             mdl.storage_level[region, nid] <= storage[region]["S_max"])
+
+    # Minimum operational storage floor (precautionary cushion): stock may
+    # not be drawn below STORAGE_FLOOR_FRAC of working capacity in any node.
+    m.storage_floor = pyo.Constraint(m.R, m.N,
+        rule=lambda mdl, region, nid:
+            mdl.storage_level[region, nid]
+            >= STORAGE_FLOOR_FRAC * storage[region]["S_max"])
 
     def _inject(mdl, region, nid):
         if region != "EU": return pyo.Constraint.Skip

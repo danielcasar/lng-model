@@ -45,7 +45,8 @@ from model_config import (
     SPOT_TRADABLE, EU_ACCESS, ASIA_ACCESS, pipeline,
     demand_blocks_base,
     EU_MONTH_FACTOR, WINTER, SUMMER, ASIA_WINTER_FACTOR, ASIA_SUMMER_FACTOR,
-    HOLDING_COST, storage, EU_NOV_TARGET_FRAC, EU_NOV_TARGET_FRAC_2026,
+    HOLDING_COST, storage, STORAGE_FLOOR_FRAC,
+    EU_NOV_TARGET_FRAC, EU_NOV_TARGET_FRAC_2026,
     NOV_2026_T, STORAGE_TARGETS_EU, LNG_AVAILABILITY,
     EU_MAX_INJECT_BCM, EU_MAX_WITHDRAW_BCM,
     M_FRINGE, M_DEMAND, M_PRICE, M_KKT, M_STORAGE,
@@ -300,6 +301,12 @@ def build_leader_mpcc(leader, others_q, ctx=None):
     model.storage_cap = pyo.Constraint(model.R, model.N,
         rule=lambda model, region, node_id:
             model.storage_level[region, node_id] <= storage[region]["S_max"])
+
+    # Minimum operational storage floor (precautionary cushion, see config)
+    model.storage_floor = pyo.Constraint(model.R, model.N,
+        rule=lambda model, region, node_id:
+            model.storage_level[region, node_id]
+            >= STORAGE_FLOOR_FRAC * storage[region]["S_max"])
 
     # Physical deliverability limits (EU only): injection and withdrawal
     # rates bounded by GIE aggregate technical capacity.

@@ -282,6 +282,15 @@ storage = {
 
 # EU Regulation 2017/1938 (as amended by Reg. (EU) 2022/1032): 90%
 # storage-filling target on 1 November, applied at every realized Nov node.
+# Minimum operational storage level (v7.1): storage may not be drawn below
+# this fraction of working-gas capacity in any month -- a security cushion
+# the operators/regulation maintain, i.e. precautionary gas not released
+# even under scarcity. Set at 30%: Fulwood (2026, OIES) reports EU storage
+# at 30 bcm = 30% of working capacity at end-March 2026, the observed low
+# point even in this tight year. Acts as a simple, data-anchored proxy for
+# precautionary (risk-averse) storage behaviour without a risk measure.
+STORAGE_FLOOR_FRAC = 0.30
+
 EU_NOV_TARGET_FRAC = 0.90
 # Crisis-year November (1 Nov 2026, t = +8): the 90% target is unattainable
 # and the EU flexibility mechanism applies. Fulwood (2026, OIES) projects
