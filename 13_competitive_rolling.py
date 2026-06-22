@@ -25,7 +25,9 @@ identical data, the difference EPEC minus competitive measures the value
 of market power under the chokepoint closure.
 """
 
+import csv
 import importlib
+import os
 import time
 
 import pyomo.environ as pyo
@@ -261,6 +263,47 @@ def report(trajectory, total_secs):
                   f"vs observed {s_obs:.1f} bcm (GIE AGSI+ / Fulwood 2026)")
     print(f"Total computing time: {total_secs:.1f} s "
           f"({len(trajectory)} monthly re-solves)", flush=True)
+
+    save_results(trajectory, TARGETS, rmse)
+
+
+def save_results(trajectory, targets, rmse):
+    """Persist the rolled trajectory + calibration to results/ as CSV."""
+    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+    os.makedirs(out_dir, exist_ok=True)
+
+    # 1. Full realized-path trajectory (prices, leader dispatch, storage).
+    traj_path = os.path.join(out_dir, "competitive_trajectory.csv")
+    with open(traj_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["t", "month", "status", "p_EU", "p_Asia",
+                    "qUSA_EU", "qUSA_Asia", "qGulf_EU", "qGulf_Asia",
+                    "S_EU", "S_Asia"])
+        for r in trajectory:
+            w.writerow([r["t"], r["month"], "OPEN" if r["open"] else "CLOSED",
+                        round(r["p_EU"], 2), round(r["p_AS"], 2),
+                        round(r["qUSA_EU"], 2), round(r["qUSA_AS"], 2),
+                        round(r["qGLF_EU"], 2), round(r["qGLF_AS"], 2),
+                        round(r["S_EU"], 1), round(r["S_AS"], 1)])
+
+    # 2. Calibration table: model vs observed over the target window.
+    cal_path = os.path.join(out_dir, "competitive_calibration.csv")
+    with open(cal_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["t", "month", "EU_model", "EU_obs", "dEU",
+                    "Asia_model", "Asia_obs", "dAsia"])
+        for r in trajectory:
+            if r["t"] not in targets:
+                continue
+            eu_o, as_o = targets[r["t"]]
+            w.writerow([r["t"], r["month"], round(r["p_EU"], 1), eu_o,
+                        round(r["p_EU"] - eu_o, 1), round(r["p_AS"], 1), as_o,
+                        round(r["p_AS"] - as_o, 1)])
+        w.writerow([])
+        w.writerow(["RMSE_EUR_per_MWh", round(rmse, 2)])
+    print(f"Results written to {os.path.relpath(out_dir)}/ "
+          f"(competitive_trajectory.csv, competitive_calibration.csv)",
+          flush=True)
 
 
 if __name__ == "__main__":
