@@ -94,16 +94,39 @@ BETA_R_PRIOR  = 12.0
 # -- an additional fraction of global LNG supply is removed (a second
 # chokepoint, a wider conflict, damaged trains). It is NEVER realized on the
 # observed path; it exists purely as the downside branch agents price in.
-# Its presence raises the expected future price at closed nodes, and because
-# the reopening belief decays month-to-month (beta_R grows) the escalation
-# tail gains relative weight as the closure persists -- producing a premium
-# that RISES the longer the strait stays shut. The escalation hazard is a
-# FIXED parameter, not Bayesian-updated: escalation is never observed on the
-# path, so there is nothing to learn; it represents a persistent structural
-# tail risk. Abstract first cut -- both knobs to be anchored to Fulwood's
-# structural ("12-month") scenario once the mechanism is validated.
-ESCALATION_RATE      = 0.10   # fixed monthly P(closed -> escalated)
-ESCALATION_LOSS_FRAC = 0.25   # extra fraction of LNG supply removed if escalated
+# Its presence raises the expected future price at closed nodes.
+#
+# RELATION TO THE BAYESIAN BELIEFS (important): escalation is NOT part of the
+# belief-updating. The open/closed dimension is genuinely Bayesian -- the
+# reopening rate p_R is a Beta posterior learned from observed transitions.
+# The escalation hazard is, by contrast, an EXOGENOUS STRUCTURAL TAIL that the
+# agent does not "learn": escalation is never realized on the observed path, so
+# there is nothing to estimate and any belief about it would be prior-dominated
+# regardless. This is the rare-disaster convention (Barro 2006; Wachter 2013):
+# disaster intensity is a fixed structural process, not estimated from a short
+# sample. It is also a SEVERITY/DEPTH tail, a different dimension from the
+# DURATION uncertainty p_R already captures.
+#
+# DURATION-DEPENDENT hazard (v9.2): the hazard is not flat but RISES with the
+# number of months k the strait has stayed shut --
+#       p_esc(k) = min(CAP, BASE + SLOPE * (k - 1))
+# a prolonged closure entrenches the conflict, degrades infrastructure and
+# withdraws shipping/insurance, so a deeper disruption becomes progressively
+# more likely. This is an INCREASING-HAZARD (Weibull-type) structural law, a
+# deterministic function of OBSERVED closure duration -- still exogenous and
+# not Bayesian-updated. It strengthens the precaution late in the closure
+# (recovering the May-Jun price rise and faster refill) without overshooting
+# the early months.
+# Calibrated (v9.2): base 0.12, slope 0.03, cap 0.40 -> hazard rises 0.12
+# (k=1, Mar) to 0.27 (k=6, Aug) across the realized closure. A gentle slope
+# fits best: a steeper ramp lifts the early-crisis forward expectation too much
+# and worsens the April ceasefire dip (which the model cannot reproduce). With
+# reroute 0.03 this gives price RMSE 4.26 (3.70 excluding the structural April
+# month) and refills storage to ~42 bcm by June (vs 38 under a flat hazard).
+ESCALATION_RATE_BASE  = 0.12  # P(closed->escalated) in the first closed month (k=1)
+ESCALATION_RATE_SLOPE = 0.03  # added hazard per further month the strait stays shut
+ESCALATION_RATE_CAP   = 0.40  # maximum monthly escalation hazard
+ESCALATION_LOSS_FRAC  = 0.25  # extra fraction of LNG supply removed if escalated
 
 # PERSISTENCE (v9.1): a one-period escalation leaf is too myopic to reward
 # precautionary storage -- the agent would have to value stock for a single

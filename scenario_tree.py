@@ -41,8 +41,28 @@ from model_config import (
     T_FIRST, T_PRE_END, T_CLOSURE_START, T_CLOSURE_END,
     T_POST_START, T_LAST, CAL_OFFSET,
     ALPHA_C_PRIOR, BETA_C_PRIOR, ALPHA_R_PRIOR, BETA_R_PRIOR,
-    ESCALATION_RATE, ESCALATION_PERSIST,
+    ESCALATION_RATE_BASE, ESCALATION_RATE_SLOPE, ESCALATION_RATE_CAP,
+    ESCALATION_PERSIST,
 )
+
+def _trailing_closed(history):
+    """Number of consecutive CLOSED months at the end of a node's history
+    (escalation hazard rises with this duration)."""
+    n = 0
+    for (_, open_) in reversed(history):
+        if open_:
+            break
+        n += 1
+    return n
+
+def escalation_hazard(months_closed):
+    """Duration-dependent structural escalation hazard p_esc(k):
+    min(CAP, BASE + SLOPE*(k-1)), an increasing-hazard (Weibull-type) law in
+    the number of months k the strait has stayed shut. Exogenous -- NOT a
+    Bayesian-updated belief (see model_config)."""
+    k = max(1, months_closed)
+    return min(ESCALATION_RATE_CAP,
+               ESCALATION_RATE_BASE + ESCALATION_RATE_SLOPE * (k - 1))
 
 def calendar_month(t):
     return ((CAL_OFFSET + t - 1) % 12) + 1
@@ -147,10 +167,12 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
             close_counts = (parent.alpha_C + 1.0, parent.beta_C,
                             parent.alpha_R,       parent.beta_R)
         else:
-            # From CLOSED: reopening (rate p_R) OR escalation (fixed hazard).
-            # The closed state retains probability 1 - p_R - p_esc.
+            # From CLOSED: reopening (learned rate p_R) OR escalation (exogenous
+            # duration-dependent hazard, rising with months-shut). The closed
+            # state retains probability 1 - p_R - p_esc.
             p_event = beta_mean(parent.alpha_R, parent.beta_R)
-            p_esc   = min(ESCALATION_RATE, max(0.0, 1.0 - p_event - 1e-6))
+            p_esc   = min(escalation_hazard(_trailing_closed(parent.history)),
+                          max(0.0, 1.0 - p_event - 1e-6))
             open_prob,  close_prob  = p_event, 1.0 - p_event - p_esc
             open_counts  = (parent.alpha_C, parent.beta_C,
                             parent.alpha_R + 1.0, parent.beta_R)

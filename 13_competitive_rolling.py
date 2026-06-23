@@ -54,6 +54,11 @@ BLOCKS_BY_REGION = m11.BLOCKS_BY_REGION
 MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
+# Show model prices in the calibration report/CSV through this month even where
+# no observation exists yet (t=+10 = Dec 2026). Observations currently run to
+# t=+4 (Jun 2026); t=+5..+10 are model forecast (observed columns left blank).
+REPORT_PRICE_END = +10
+
 
 def build_welfare_lp(ctx):
     """Welfare-maximisation LP over one scenario (sub)tree."""
@@ -245,17 +250,22 @@ def report(trajectory, total_secs):
           f"{'AS_mod':>7} {'AS_obs':>7} {'dAS':>6}")
     sq_err, n_obs = 0.0, 0
     for rec in trajectory:
-        if rec["t"] not in TARGETS:
+        if rec["t"] > REPORT_PRICE_END:
             continue
-        eu_obs, as_obs = TARGETS[rec["t"]]
-        print(f"{rec['t']:>+3d} {rec['month']:>6}  "
-              f"{rec['p_EU']:>7.1f} {eu_obs:>7.1f} {rec['p_EU']-eu_obs:>+6.1f}   "
-              f"{rec['p_AS']:>7.1f} {as_obs:>7.1f} {rec['p_AS']-as_obs:>+6.1f}")
-        sq_err += (rec["p_EU"] - eu_obs) ** 2 + (rec["p_AS"] - as_obs) ** 2
-        n_obs  += 2
+        if rec["t"] in TARGETS:
+            eu_obs, as_obs = TARGETS[rec["t"]]
+            print(f"{rec['t']:>+3d} {rec['month']:>6}  "
+                  f"{rec['p_EU']:>7.1f} {eu_obs:>7.1f} {rec['p_EU']-eu_obs:>+6.1f}   "
+                  f"{rec['p_AS']:>7.1f} {as_obs:>7.1f} {rec['p_AS']-as_obs:>+6.1f}")
+            sq_err += (rec["p_EU"] - eu_obs) ** 2 + (rec["p_AS"] - as_obs) ** 2
+            n_obs  += 2
+        else:   # not yet observed -- show model forecast only
+            print(f"{rec['t']:>+3d} {rec['month']:>6}  "
+                  f"{rec['p_EU']:>7.1f} {'--':>7} {'--':>6}   "
+                  f"{rec['p_AS']:>7.1f} {'--':>7} {'--':>6}")
     rmse = (sq_err / max(n_obs, 1)) ** 0.5
     print("-" * 70)
-    print(f"RMSE over {n_obs} observations: {rmse:.2f} EUR/MWh")
+    print(f"RMSE over {n_obs} observed values (through Jun 2026): {rmse:.2f} EUR/MWh")
 
     # EU storage: model realized-path trajectory vs observed (GIE AGSI+ /
     # Fulwood 2026). RMSE over the months for which an observation exists.
@@ -338,14 +348,18 @@ def save_results(trajectory, targets, rmse, s_rmse=None):
         w.writerow(["t", "month", "EU_model", "EU_obs", "dEU",
                     "Asia_model", "Asia_obs", "dAsia"])
         for r in trajectory:
-            if r["t"] not in targets:
+            if r["t"] > REPORT_PRICE_END:
                 continue
-            eu_o, as_o = targets[r["t"]]
-            w.writerow([r["t"], r["month"], round(r["p_EU"], 1), eu_o,
-                        round(r["p_EU"] - eu_o, 1), round(r["p_AS"], 1), as_o,
-                        round(r["p_AS"] - as_o, 1)])
+            if r["t"] in targets:
+                eu_o, as_o = targets[r["t"]]
+                w.writerow([r["t"], r["month"], round(r["p_EU"], 1), eu_o,
+                            round(r["p_EU"] - eu_o, 1), round(r["p_AS"], 1), as_o,
+                            round(r["p_AS"] - as_o, 1)])
+            else:   # not yet observed -- model forecast only
+                w.writerow([r["t"], r["month"], round(r["p_EU"], 1), "", "",
+                            round(r["p_AS"], 1), "", ""])
         w.writerow([])
-        w.writerow(["RMSE_EUR_per_MWh", round(rmse, 2)])
+        w.writerow(["RMSE_EUR_per_MWh (through Jun 2026)", round(rmse, 2)])
     print(f"Results written to {os.path.relpath(out_dir)}/ "
           f"(competitive_trajectory.csv, competitive_calibration.csv, "
           f"competitive_storage.csv)", flush=True)
