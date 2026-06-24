@@ -385,14 +385,17 @@ ASIA_SUMMER_FACTOR = 0.85
 # =============================================================================
 
 # Constant physical storage holding cost (EUR/MWh per bcm of end-of-month
-# stock). Raised 0.10 -> 0.50 (v11): at 0.10 the cost of carrying gas was so
+# stock). Raised 0.10 -> 0.40 (v11/v12): at 0.10 the cost of carrying gas was so
 # small that storage timing was near-degenerate -- the (large) branching LP
 # picked an over-hold optimum (autumn-2025 storage pinned at ~90 bcm, well above
-# the observed ~82 and above the 80% mandate, distorting pre-crisis prices). A
-# realistic carry cost (capital tied up in stored gas + storage capacity fees;
-# ~0.5 EUR/MWh-month at ~40 EUR/MWh gas) breaks the degeneracy: the agent draws
-# storage down on the observed trajectory and pre-crisis prices normalise.
-HOLDING_COST = 0.50
+# the observed ~82, distorting pre-crisis prices). A realistic carry cost
+# (capital tied up in stored gas + storage capacity fees; ~0.4 EUR/MWh-month at
+# ~40 EUR/MWh gas) breaks the degeneracy. Tuned to 0.40 (vs 0.50): it holds
+# November 2025 storage closer to observed (the higher 0.50 over-drew Nov,
+# 69 vs observed 80) and gives the best storage fit (RMSE ~3.6 bcm). The
+# residual Nov draw is the EU's operational hold-near-peak behaviour, which a
+# cost-minimising model cannot fully reproduce without a seasonal envelope.
+HOLDING_COST = 0.40
 
 storage = {
     # EU: aggregate working gas volume ~100 bcm, fill ~85% at model start
