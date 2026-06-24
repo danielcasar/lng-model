@@ -203,3 +203,46 @@ def make_ctx(nodes, realized_ids, s_init):
                          if not node.children and node.t == T_LAST],
         "S_INIT":       dict(s_init),
     }
+
+# =============================================================================
+# UNIFIED PRICE-TAKING SUPPLIER SET (competitive core)
+# =============================================================================
+# In the competitive market core every exporter and pipeline is a PRICE TAKER;
+# there is no strategic "leader" class. Suppliers differ only in
+#   (i)  which regions they can serve -- region-locked pipelines / single-basin
+#        LNG (one region) vs. the two cross-basin exporters USA and the Gulf
+#        composite, which allocate ONE capacity pool across both basins; and
+#   (ii) their node-dependent capacity pool (closure blocking, the Gulf restart
+#        ramp, the escalation/reroute seaborne-LNG derate).
+# The fringe[] / leader_*[] objects above are kept only as the building blocks
+# for this unified set (and for the archived strategic EPEC); the LP sees a
+# single supplier set with no leader/fringe distinction.
+
+SUPPLIERS = {}
+for _region in REGIONS:
+    for _s in fringe[_region]:
+        SUPPLIERS[_s] = {"access": (_region,), "region": _region, "pooled": False,
+                         "cost": {_region: fringe[_region][_s]["cost"]}}
+for _L in ("USA", "Gulf"):                         # cross-basin price takers
+    SUPPLIERS[_L] = {"access": tuple(LEADER_REGIONS[_L]), "region": None, "pooled": True,
+                     "cost": {r: leader_cost[_L][r] for r in LEADER_REGIONS[_L]}}
+
+SUPPLIER_LIST       = list(SUPPLIERS.keys())
+SUPPLIER_ACCESS     = {s: SUPPLIERS[s]["access"] for s in SUPPLIERS}
+SUPPLIERS_BY_REGION = {r: [s for s in SUPPLIER_LIST if r in SUPPLIERS[s]["access"]]
+                       for r in REGIONS}
+# (supplier, region) pairs over which the LP defines a dispatch variable.
+SR_PAIRS = [(s, r) for s in SUPPLIER_LIST for r in SUPPLIERS[s]["access"]]
+
+def supply_cost(supplier, region):
+    """Delivered cost of a supplier into an accessible region (EUR/MWh)."""
+    return SUPPLIERS[supplier]["cost"][region]
+
+def supply_cap(supplier, node):
+    """Monthly capacity POOL of a supplier, shared across its accessible regions
+    (the sum of its dispatch over those regions may not exceed this). Embeds
+    closure blocking, the Gulf restart ramp, and the escalation/reroute derate."""
+    info = SUPPLIERS[supplier]
+    if info["pooled"]:
+        return leader_cap_at_node(supplier, node)
+    return fringe_capacity(info["region"], supplier, node)

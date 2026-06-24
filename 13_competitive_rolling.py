@@ -9,12 +9,15 @@ withhold. Accordingly the market core is PERFECTLY COMPETITIVE:
 
   max  E[ consumer surplus - supply cost - storage holding cost ]
 
-over the Bayesian scenario tree, subject to capacities, contract floors,
-storage dynamics, deliverability limits and the Nov-1 mandates. All agents
-(including USA and Gulf) are price-takers; market prices are the DUALS of
-the nodal market-balance constraints. The model is a pure LP: no binaries,
-no Big-M, no equilibrium selection, no convergence question -- one monthly
-re-solve takes well under a second.
+over the Bayesian scenario tree, subject to capacities, storage dynamics,
+deliverability limits and the Nov-1 mandate. ALL exporters are price-takers in
+a single unified supplier set (market.py): there is no strategic leader class.
+Suppliers differ only by which regions they serve -- region-locked pipelines /
+single-basin LNG vs. the two cross-basin exporters (USA, Gulf composite) that
+allocate one capacity pool across both basins -- and by their node capacity.
+Market prices are the DUALS of the nodal market-balance constraints. The model
+is a pure LP -- no binaries, no equilibrium selection -- one re-solve takes well
+under a second.
 
 Rolling horizon: each month rebuilds the belief subtree (conjugate Bayes +
 the duration-dependent escalation tail), re-solves, and implements only the
@@ -69,51 +72,42 @@ def build_welfare_lp(ctx):
     S_INIT       = ctx["S_INIT"]
 
     m = pyo.ConcreteModel("competitive_market")
-    m.R  = pyo.Set(initialize=list(REGIONS))
-    m.N  = pyo.Set(initialize=NODE_IDS)
-    m.RS = pyo.Set(initialize=[(r, s) for r in REGIONS
-                               for s in FRINGE_BY_REGION[r]], dimen=2)
-    m.RK = pyo.Set(initialize=[(r, k) for r in REGIONS
+    m.R   = pyo.Set(initialize=list(REGIONS))
+    m.N   = pyo.Set(initialize=NODE_IDS)
+    m.SR  = pyo.Set(initialize=mkt.SR_PAIRS, dimen=2)        # (supplier, region) pairs
+    m.SUP = pyo.Set(initialize=mkt.SUPPLIER_LIST)            # suppliers (price takers)
+    m.RK  = pyo.Set(initialize=[(r, k) for r in REGIONS
                                for k in BLOCKS_BY_REGION[r]], dimen=2)
-    m.LR = pyo.Set(initialize=[(L, r) for L in LEADERS
-                               for r in LEADER_REGIONS[L]], dimen=2)
 
-    m.fringe_supply = pyo.Var(m.RS, m.N, domain=pyo.NonNegativeReals)
-    m.leader_supply = pyo.Var(m.LR, m.N, domain=pyo.NonNegativeReals)
+    m.supply        = pyo.Var(m.SR, m.N, domain=pyo.NonNegativeReals)
     m.demand_served = pyo.Var(m.RK, m.N, domain=pyo.NonNegativeReals)
     m.storage_level = pyo.Var(m.R,  m.N, domain=pyo.NonNegativeReals)
     m.storage_flow  = pyo.Var(m.R,  m.N, domain=pyo.Reals)
 
     # Market balance per (region, node): demand + injection <= total supply.
     # Its dual, divided by the node probability, is the market price.
+    # Market balance per (region, node): demand + injection <= supply from all
+    # suppliers that can serve the region. Dual / node prob = market price.
     def _balance(mdl, region, nid):
         return (sum(mdl.demand_served[region, k, nid] for k in BLOCKS_BY_REGION[region])
                 + mdl.storage_flow[region, nid]
-                <= sum(mdl.fringe_supply[region, s, nid] for s in FRINGE_BY_REGION[region])
-                   + sum(mdl.leader_supply[L, region, nid] for L in LEADERS
-                         if region in LEADER_REGIONS[L]))
+                <= sum(mdl.supply[s, region, nid] for s in mkt.SUPPLIERS_BY_REGION[region]))
     m.balance = pyo.Constraint(m.R, m.N, rule=_balance)
 
-    m.fringe_cap = pyo.Constraint(m.RS, m.N,
-        rule=lambda mdl, region, s, nid:
-            mdl.fringe_supply[region, s, nid]
-            <= mkt.fringe_capacity(region, s, NODES[nid]))
     m.block_cap = pyo.Constraint(m.RK, m.N,
         rule=lambda mdl, region, k, nid:
             mdl.demand_served[region, k, nid]
             <= mkt.block_size(region, k, NODES[nid].t))
 
-    # Leader capacity (path-aware: closure blocking + restart ramp) and
-    # contract floor (LT-contract share that must be dispatched).
-    def _leader_cap(mdl, L, nid):
-        return (sum(mdl.leader_supply[L, region, nid] for region in LEADER_REGIONS[L])
-                <= mkt.leader_cap_at_node(L, NODES[nid]))
-    m.leader_cap = pyo.Constraint(pyo.Set(initialize=LEADERS), m.N, rule=_leader_cap)
-
-    def _leader_floor(mdl, L, nid):
-        return (sum(mdl.leader_supply[L, region, nid] for region in LEADER_REGIONS[L])
-                >= CONTRACT_FLOOR[L] * mkt.leader_cap_at_node(L, NODES[nid]))
-    m.leader_floor = pyo.Constraint(pyo.Set(initialize=LEADERS), m.N, rule=_leader_floor)
+    # Per-supplier capacity POOL: total dispatch over a supplier's accessible
+    # regions <= its node capacity. Region-locked suppliers (pipelines, single-
+    # basin LNG) have a one-region pool; the cross-basin USA / Gulf allocate one
+    # shared pool across both basins. The pool embeds closure blocking, the Gulf
+    # restart ramp, and the escalation/reroute seaborne-LNG derate.
+    def _supply_cap(mdl, s, nid):
+        return (sum(mdl.supply[s, r, nid] for r in mkt.SUPPLIER_ACCESS[s])
+                <= mkt.supply_cap(s, NODES[nid]))
+    m.supply_cap = pyo.Constraint(m.SUP, m.N, rule=_supply_cap)
 
     def _storage_balance(mdl, region, nid):
         node = NODES[nid]
@@ -162,10 +156,8 @@ def build_welfare_lp(ctx):
         expr=sum(NODES[nid].cum_prob * (
                  sum(mkt.block_wtp(r, k) * m.demand_served[r, k, nid]
                      for (r, k) in m.RK)
-                 - sum(mkt.fringe_cost(r, s) * m.fringe_supply[r, s, nid]
-                       for (r, s) in m.RS)
-                 - sum(mkt.leader_cost[L][r] * m.leader_supply[L, r, nid]
-                       for (L, r) in m.LR)
+                 - sum(mkt.supply_cost(s, r) * m.supply[s, r, nid]
+                       for (s, r) in m.SR)
                  - HOLDING_COST * sum(m.storage_level[r, nid] for r in REGIONS))
                  for nid in m.N))
 
@@ -187,7 +179,9 @@ def solve_competitive(ctx):
         for nid in NODE_IDS:
             prob = max(NODES[nid].cum_prob, 1e-12)
             prices[region][nid] = abs(m.dual[m.balance[region, nid]]) / prob
-    leader_q = {L: {region: {nid: pyo.value(m.leader_supply[L, region, nid])
+    # USA / Gulf are now ordinary cross-basin price-taking suppliers; read their
+    # dispatch from the unified supply variable for reporting.
+    leader_q = {L: {region: {nid: pyo.value(m.supply[L, region, nid])
                              for nid in NODE_IDS}
                     for region in LEADER_REGIONS[L]} for L in LEADERS}
     stocks = {region: {nid: pyo.value(m.storage_level[region, nid])
