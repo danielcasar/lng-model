@@ -200,11 +200,17 @@ def roll(verbose=True):
     counts  = (ALPHA_C_PRIOR, BETA_C_PRIOR, ALPHA_R_PRIOR, BETA_R_PRIOR)
     s_state = {region: storage[region]["S_init"] for region in REGIONS}
     trajectory = []
+    closed_run = 0   # true consecutive closed months elapsed up to t0
 
     for t0 in range(ROLL_START, ROLL_END + 1):
         open0 = realized_status(t0)
+        closed_run = 0 if open0 else closed_run + 1
         t_roll = time.time()
-        nodes, realized_ids = build_tree_from(t0, open0, *counts)
+        # Carry the TRUE elapsed closure into the tree so the escalation hazard
+        # and reroute derate see real duration (the Bayesian counts already
+        # persist across re-solves; the duration must too).
+        nodes, realized_ids = build_tree_from(t0, open0, *counts,
+                                              closed_at_start=closed_run)
         ctx = m11.make_ctx(nodes, realized_ids, s_state)
 
         prices, leader_q, stocks, welfare = solve_competitive(ctx)

@@ -42,7 +42,7 @@ from model_config import (
     T_POST_START, T_LAST, CAL_OFFSET,
     ALPHA_C_PRIOR, BETA_C_PRIOR, ALPHA_R_PRIOR, BETA_R_PRIOR,
     ESCALATION_RATE_BASE, ESCALATION_RATE_SLOPE, ESCALATION_RATE_CAP,
-    ESCALATION_PERSIST,
+    ESCALATION_HAZARD_BY_K, ESCALATION_PERSIST,
 )
 
 def _trailing_closed(history):
@@ -56,11 +56,22 @@ def _trailing_closed(history):
     return n
 
 def escalation_hazard(months_closed):
-    """Duration-dependent structural escalation hazard p_esc(k):
-    min(CAP, BASE + SLOPE*(k-1)), an increasing-hazard (Weibull-type) law in
-    the number of months k the strait has stayed shut. Exogenous -- NOT a
-    Bayesian-updated belief (see model_config)."""
+    """Duration-dependent structural escalation hazard p_esc(k) in the number
+    of months k the strait has stayed shut. Exogenous -- NOT a Bayesian-updated
+    belief (see model_config). If ESCALATION_HAZARD_BY_K is non-empty, the
+    per-month calibrated values are used (linearly extrapolated beyond the
+    largest specified k); otherwise the parametric min(CAP, BASE+SLOPE*(k-1))."""
     k = max(1, months_closed)
+    d = ESCALATION_HAZARD_BY_K
+    if d:
+        if k in d:
+            return d[k]
+        ks = sorted(d)
+        if k < ks[0]:
+            return d[ks[0]]
+        k1, k2 = ks[-2], ks[-1]                       # extrapolate from last two
+        slope = (d[k2] - d[k1]) / (k2 - k1)
+        return min(0.95, max(0.0, d[k2] + slope * (k - k2)))
     return min(ESCALATION_RATE_CAP,
                ESCALATION_RATE_BASE + ESCALATION_RATE_SLOPE * (k - 1))
 
@@ -97,6 +108,10 @@ class TreeNode:
     beta_R:  float
     children: list = field(default_factory=list)
     escalated: bool = False     # True if this is a (deeper-disruption) ESCALATED node
+    months_closed: int = 0      # TRUE consecutive closed months up to & incl. this
+                                # node (carries the pre-root duration in rolling
+                                # re-solves, so escalation/reroute see real elapsed
+                                # closure -- not a per-solve reset)
 
 # =============================================================================
 # TREE CONSTRUCTION
@@ -109,7 +124,7 @@ def realized_status(t):
 
 
 def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
-                    verbose=False):
+                    closed_at_start=0, verbose=False):
     """Build the scenario tree from an arbitrary starting month and belief
     state -- the workhorse for ROLLING-HORIZON re-solves.
 
@@ -119,11 +134,27 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
     counterfactual sibling (the branch where the closure state would have
     flipped) so agents' conditional expectations are well-defined.
 
+    closed_at_start = the number of consecutive months the strait has ALREADY
+    been closed up to and including t_start (>=1 if the root is closed, 0 if
+    open). It seeds the per-node months_closed so the duration-dependent
+    escalation hazard and the realized reroute derate see the TRUE elapsed
+    closure in rolling re-solves -- without it the duration would reset to 1
+    every month (the Bayesian counts persist; the duration must too).
+
     build_tree() (below) is the special case t_start = T_FIRST with prior
     beliefs -- the full-horizon tree used by the one-shot model.
     """
     nodes = {}
     realized_ids = []
+
+    def _mc(history, closure_open):
+        """True consecutive closed months up to & incl. this node: trailing
+        closed run in-tree, plus the pre-root elapsed closure when the run
+        reaches all the way back to the (closed) root."""
+        if closure_open:
+            return 0
+        tc = _trailing_closed(history)
+        return (closed_at_start + tc - 1) if tc == len(history) else tc
 
     def add_node(t, closure_open, parent_id, history, edge_prob,
                  a_C, b_C, a_R, b_R, escalated=False, node_id=None):
@@ -139,6 +170,7 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
             cum_prob=parent_cum * edge_prob,
             alpha_C=a_C, beta_C=b_C, alpha_R=a_R, beta_R=b_R,
             children=[], escalated=escalated,
+            months_closed=_mc(history, closure_open),
         )
         nodes[node_id] = n
         if parent_id and node_id not in nodes[parent_id].children:
@@ -150,7 +182,7 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
         node_id="root", t=t_start, closure_open=open_start,
         history=root_history, parent_id="", cum_prob=1.0,
         alpha_C=alpha_C, beta_C=beta_C, alpha_R=alpha_R, beta_R=beta_R,
-        children=[],
+        children=[], months_closed=_mc(root_history, open_start),
     )
     nodes["root"] = root
     realized_ids.append("root")
@@ -171,7 +203,7 @@ def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
             # duration-dependent hazard, rising with months-shut). The closed
             # state retains probability 1 - p_R - p_esc.
             p_event = beta_mean(parent.alpha_R, parent.beta_R)
-            p_esc   = min(escalation_hazard(_trailing_closed(parent.history)),
+            p_esc   = min(escalation_hazard(parent.months_closed),
                           max(0.0, 1.0 - p_event - 1e-6))
             open_prob,  close_prob  = p_event, 1.0 - p_event - p_esc
             open_counts  = (parent.alpha_C, parent.beta_C,

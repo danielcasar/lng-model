@@ -123,10 +123,18 @@ BETA_R_PRIOR  = 12.0
 # and worsens the April ceasefire dip (which the model cannot reproduce). With
 # reroute 0.03 this gives price RMSE 4.26 (3.70 excluding the structural April
 # month) and refills storage to ~42 bcm by June (vs 38 under a flat hazard).
-ESCALATION_RATE_BASE  = 0.12  # P(closed->escalated) in the first closed month (k=1)
+ESCALATION_RATE_BASE  = 0.02  # P(closed->escalated) in the first closed month (k=1)
 ESCALATION_RATE_SLOPE = 0.03  # added hazard per further month the strait stays shut
 ESCALATION_RATE_CAP   = 0.40  # maximum monthly escalation hazard
 ESCALATION_LOSS_FRAC  = 0.25  # extra fraction of LNG supply removed if escalated
+
+# DIRECT PER-MONTH CALIBRATION (v9.4): if non-empty, these per-k hazard values
+# are used INSTEAD of the parametric (BASE/SLOPE/CAP) form -- k = months the
+# strait has stayed shut. The plan is to calibrate the monthly likelihood
+# directly to the observed prices, then inspect whether the fitted sequence is
+# ~linear and, if so, fold it back into BASE/SLOPE. Beyond the largest specified
+# k the hazard is linearly extrapolated from the last two entries (clamped).
+ESCALATION_HAZARD_BY_K = {}   # e.g. {1:0.10, 2:0.20, 3:0.35, ...}; empty -> parametric
 
 # PERSISTENCE (v9.1): a one-period escalation leaf is too myopic to reward
 # precautionary storage -- the agent would have to value stock for a single

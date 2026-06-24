@@ -3,12 +3,12 @@ t,month,S_EU_model,S_EU_obs,dS_EU,source
 -4,Oct,90.0,82.0,8.0,GIE AGSI+ (approx.)
 -3,Nov,73.3,80.0,-6.7,GIE AGSI+ (approx.)
 -2,Dec,52.9,63.0,-10.1,AGSI+/CEEnergyNews (firm)
--1,Jan,40.6,48.0,-7.4,AGSI+ interp. (est.)
-0,Feb,30.6,38.0,-7.4,AGSI+ interp. (est.)
+-1,Jan,45.6,48.0,-2.4,AGSI+ interp. (est.)
+0,Feb,36.6,38.0,-1.4,AGSI+ interp. (est.)
 1,Mar,30.0,30.0,0.0,Fulwood2026/AGSI+ (firm)
 2,Apr,30.0,31.0,-1.0,GIE AGSI+ (approx.)
-3,May,35.0,37.0,-2.0,GIE AGSI+ (approx.)
-4,Jun,42.1,46.0,-3.9,GIE AGSI+ (approx.)
+3,May,32.7,37.0,-4.3,GIE AGSI+ (approx.)
+4,Jun,37.2,46.0,-8.8,GIE AGSI+ (approx.)
 8,Oct,80.0,78.0,2.0,Fulwood2026 proj.
 
-storage_RMSE_bcm,5.69
+storage_RMSE_bcm,5.49

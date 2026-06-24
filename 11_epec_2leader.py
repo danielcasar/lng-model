@@ -84,7 +84,13 @@ def _escalation_factor(node):
     return (1.0 - ESCALATION_LOSS_FRAC) if getattr(node, "escalated", False) else 1.0
 
 def _months_closed(node):
-    """Trailing consecutive closed months up to and including this node."""
+    """TRUE consecutive closed months up to and including this node, as stamped
+    on the node at tree-build time (scenario_tree). This carries the pre-root
+    elapsed closure in rolling re-solves; falls back to the in-tree trailing
+    count for nodes built without the attribute."""
+    mc = getattr(node, "months_closed", None)
+    if mc is not None:
+        return mc
     n = 0
     for (_, open_) in reversed(node.history):
         if open_:

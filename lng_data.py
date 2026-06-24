@@ -63,33 +63,44 @@ BEP_USD = {
 }
 
 # =============================================================================
-# Transport costs  ($/MMBtu)  — simplified per (exporter, importer)
-# Derived qualitatively from paper Eq. 8–15: longer routes / canal fees / boil-
-# off raise TC. Pipeline routes are essentially zero. The figures below are
-# round-number estimates suitable for an illustrative model; calibrating these
-# exactly per their Appendix A formulas would be a refinement.
+# Transport costs  ($/MMBtu)  — ZWICKL-BERNHARD & NEUMANN (2024), as published.
+#
+# Replaces the earlier round-number estimates with the paper's OWN per-route
+# transport costs, recovered exactly from their published delivered ex-ship cost
+# matrix: TC = DES_e,i - BEP_e, where DES is the "0_delivered ex-ship costs in
+# 2019.xlsx" file from their dataset (Zenodo 10.5281/zenodo.10911217; GitHub
+# sebastianzwickl/lng-trade-europe) and BEP_e is their Table 6. The DES is built
+# from their Appendix A cost function (Eq. 8-15: chartering + fuel + boil-off +
+# canal/insurance fees + port, over heel), so these values are fully sourced --
+# no charter/fuel re-pricing assumption is introduced.
+#
+# NOTE on the two pipeline-adjacent routes: ZB&N's published DES for Algeria->EU
+# is BELOW Algeria's BEP (Algeria reaches Europe predominantly by pipeline -
+# Medgaz/Transmed - so its delivered cost is not a marine voyage), giving a
+# negative formula TC; we therefore carry Algeria->EU as ~zero marine transport
+# (pipeline-adjacent). Other_Europe (Norway) is likewise modelled as pipeline.
 # =============================================================================
 
 TC_USD = {
     # ---- to EU ----------------------------------------------------------
     ("Other_Europe",      "EU"):  0.0,    # Norway / Other Europe pipeline
-    ("Algeria",           "EU"):  1.5,    # short-haul Med shipping / pipeline
-    ("Nigeria",           "EU"):  2.0,
-    ("Qatar",             "EU"):  1.5,    # via Hormuz + Suez
-    ("Trinidad",          "EU"):  1.8,    # Atlantic crossing
-    ("Other_Americas",    "EU"):  2.2,
-    ("Other_Africa",      "EU"):  2.0,
-    ("USA",               "EU"):  2.0,
+    ("Algeria",           "EU"):  0.0,    # pipeline-adjacent (DES_2019 < BEP; see note)
+    ("Nigeria",           "EU"):  1.29,
+    ("Qatar",             "EU"):  1.92,   # via Suez
+    ("Trinidad",          "EU"):  1.27,   # Atlantic crossing
+    ("Other_Americas",    "EU"):  2.16,
+    ("Other_Africa",      "EU"):  1.47,
+    ("USA",               "EU"):  1.60,
     # ---- to Asia --------------------------------------------------------
-    ("Russia",            "Asia"): 0.5,   # Sakhalin → NE Asia, short
-    ("Australia",         "Asia"): 0.7,   # Zou Table 4/5: Gorgon → NE Asia $0.67-0.68
-    ("Indonesia",         "Asia"): 1.0,
-    ("Malaysia",          "Asia"): 1.0,
-    ("Qatar",             "Asia"): 1.2,   # via Hormuz
-    ("Oman",              "Asia"): 1.2,
-    ("Other_Middle_East", "Asia"): 1.4,
-    ("Other_Asia_Pacific","Asia"): 1.6,
-    ("USA",               "Asia"): 3.5,   # Panama or Cape, long-haul
+    ("Russia",            "Asia"): 1.59,  # Sakhalin -> NE Asia
+    ("Australia",         "Asia"): 1.25,
+    ("Indonesia",         "Asia"): 0.83,
+    ("Malaysia",          "Asia"): 0.71,
+    ("Qatar",             "Asia"): 1.75,
+    ("Oman",              "Asia"): 1.67,
+    ("Other_Middle_East", "Asia"): 1.77,
+    ("Other_Asia_Pacific","Asia"): 0.36,
+    ("USA",               "Asia"): 3.13,  # via Panama, long-haul
 }
 
 # =============================================================================
