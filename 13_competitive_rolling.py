@@ -16,17 +16,17 @@ the nodal market-balance constraints. The model is a pure LP: no binaries,
 no Big-M, no equilibrium selection, no convergence question -- one monthly
 re-solve takes well under a second.
 
-The rolling-horizon driver is identical in structure to 12_rolling_epec:
-each month rebuilds the belief subtree (conjugate Bayes), re-solves, and
-implements only the root decisions.
+Rolling horizon: each month rebuilds the belief subtree (conjugate Bayes +
+the duration-dependent escalation tail), re-solves, and implements only the
+root decisions. Shared market structure (fringe, costs, capacities, demand
+blocks, the closure/escalation/reroute derates, make_ctx) lives in market.py.
 
-The strategic EPEC (11/12) remains as the COMPARISON experiment: run on
-identical data, the difference EPEC minus competitive measures the value
-of market power under the chokepoint closure.
+A two-leader strategic Stackelberg-EPEC variant was explored as a comparison
+(does market power matter under the closure?); it is archived outside the repo
+(code/archive/) and is not part of the tracked model.
 """
 
 import csv
-import importlib
 import os
 import time
 
@@ -45,11 +45,11 @@ from model_config import (
     LEADERS, LEADER_REGIONS, CONTRACT_FLOOR,
 )
 
-# market structure (fringe, costs, capacities, blocks) from the model module
-m11 = importlib.import_module("11_epec_2leader")
-REGIONS          = m11.REGIONS
-FRINGE_BY_REGION = m11.FRINGE_BY_REGION
-BLOCKS_BY_REGION = m11.BLOCKS_BY_REGION
+# Shared market structure (fringe, costs, capacities, demand blocks, derates).
+import market as mkt
+REGIONS          = mkt.REGIONS
+FRINGE_BY_REGION = mkt.FRINGE_BY_REGION
+BLOCKS_BY_REGION = mkt.BLOCKS_BY_REGION
 
 MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -97,22 +97,22 @@ def build_welfare_lp(ctx):
     m.fringe_cap = pyo.Constraint(m.RS, m.N,
         rule=lambda mdl, region, s, nid:
             mdl.fringe_supply[region, s, nid]
-            <= m11.fringe_capacity(region, s, NODES[nid]))
+            <= mkt.fringe_capacity(region, s, NODES[nid]))
     m.block_cap = pyo.Constraint(m.RK, m.N,
         rule=lambda mdl, region, k, nid:
             mdl.demand_served[region, k, nid]
-            <= m11.block_size(region, k, NODES[nid].t))
+            <= mkt.block_size(region, k, NODES[nid].t))
 
     # Leader capacity (path-aware: closure blocking + restart ramp) and
     # contract floor (LT-contract share that must be dispatched).
     def _leader_cap(mdl, L, nid):
         return (sum(mdl.leader_supply[L, region, nid] for region in LEADER_REGIONS[L])
-                <= m11.leader_cap_at_node(L, NODES[nid]))
+                <= mkt.leader_cap_at_node(L, NODES[nid]))
     m.leader_cap = pyo.Constraint(pyo.Set(initialize=LEADERS), m.N, rule=_leader_cap)
 
     def _leader_floor(mdl, L, nid):
         return (sum(mdl.leader_supply[L, region, nid] for region in LEADER_REGIONS[L])
-                >= CONTRACT_FLOOR[L] * m11.leader_cap_at_node(L, NODES[nid]))
+                >= CONTRACT_FLOOR[L] * mkt.leader_cap_at_node(L, NODES[nid]))
     m.leader_floor = pyo.Constraint(pyo.Set(initialize=LEADERS), m.N, rule=_leader_floor)
 
     def _storage_balance(mdl, region, nid):
@@ -160,11 +160,11 @@ def build_welfare_lp(ctx):
     m.obj = pyo.Objective(
         sense=pyo.maximize,
         expr=sum(NODES[nid].cum_prob * (
-                 sum(m11.block_wtp(r, k) * m.demand_served[r, k, nid]
+                 sum(mkt.block_wtp(r, k) * m.demand_served[r, k, nid]
                      for (r, k) in m.RK)
-                 - sum(m11.fringe_cost(r, s) * m.fringe_supply[r, s, nid]
+                 - sum(mkt.fringe_cost(r, s) * m.fringe_supply[r, s, nid]
                        for (r, s) in m.RS)
-                 - sum(m11.leader_cost[L][r] * m.leader_supply[L, r, nid]
+                 - sum(mkt.leader_cost[L][r] * m.leader_supply[L, r, nid]
                        for (L, r) in m.LR)
                  - HOLDING_COST * sum(m.storage_level[r, nid] for r in REGIONS))
                  for nid in m.N))
@@ -211,7 +211,7 @@ def roll(verbose=True):
         # persist across re-solves; the duration must too).
         nodes, realized_ids = build_tree_from(t0, open0, *counts,
                                               closed_at_start=closed_run)
-        ctx = m11.make_ctx(nodes, realized_ids, s_state)
+        ctx = mkt.make_ctx(nodes, realized_ids, s_state)
 
         prices, leader_q, stocks, welfare = solve_competitive(ctx)
 

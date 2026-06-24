@@ -58,15 +58,14 @@ second.
 - **Calibrated** to observed monthly TTF/JKM prices and EU storage:
   realised-path price RMSE ≈ 3.9 EUR/MWh, storage RMSE ≈ 6 bcm.
 
-### Strategic comparison (optional): the EPEC
+### Strategic comparison (archived): the EPEC
 
-`11_epec_2leader.py` / `12_rolling_epec.py` solve the *same market* with two
-strategic Stackelberg leaders (USA and a Gulf composite) instead of price
-takers — each leader's problem is an MPCC (KKT + Fortuny-Amat–McCarl Big-M),
-the two-leader EPEC solved by Gauss–Seidel diagonalization. Run on identical
-data, the difference *EPEC − competitive* measures the value of market power
-under the chokepoint closure. It is slow (hours) and not the headline model;
-it shares its market-structure definitions with the LP (see file table).
+A two-leader strategic Stackelberg-EPEC variant (USA + a Gulf composite as
+price-makers, each leader an MPCC solved by Gauss–Seidel diagonalization) was
+explored to test whether market power matters under the closure. It is **kept
+locally in `code/archive/` and is not part of the tracked repo** — the
+competitive LP is the model. The archived scripts import the shared structure
+from `market.py`.
 
 ---
 
@@ -102,13 +101,6 @@ with provenance flags), and three CSVs under `results/`
 (`competitive_trajectory.csv`, `competitive_calibration.csv`,
 `competitive_storage.csv`).
 
-Optional strategic comparison (slow, ~hours):
-
-```bash
-python 11_epec_2leader.py     # one-shot EPEC
-python 12_rolling_epec.py     # rolling-horizon EPEC
-```
-
 ---
 
 ## File organisation
@@ -118,10 +110,10 @@ python 12_rolling_epec.py     # rolling-horizon EPEC
 | `13_competitive_rolling.py` | **THE model.** Rolling-horizon competitive welfare-LP per monthly belief subtree; prices = duals of the nodal market balance. Writes the calibration + storage reports and `results/` CSVs. |
 | `model_config.py` | **Single configuration source.** Every tunable value (time horizon, priors, escalation/persistence, reroute derate, leaders, fringe, demand staircases, seasonality, storage, observed-storage series, Big-Ms, rolling settings) with inline source citations. All scripts import from here. |
 | `parameters.csv` | **Single reference sheet of ALL configuration values and data inputs**, each with unit, type (Data / Derived / Calibrated / Assumption / Numerical) and explicit source. Start here for any sanity check. |
-| `scenario_tree.py` | Builds the Bayesian scenario tree: Beta-Bernoulli posterior beliefs over the two-state Markov chain, plus the persistent (absorbing) escalation branch. |
+| `market.py` | **Shared market structure**: regions, fringe suppliers, delivered costs, liquefaction capacities, the closure/escalation/reroute capacity derates, the demand-response staircase, seasonality, and `make_ctx`. Imported by the LP. |
+| `scenario_tree.py` | Builds the multi-stage **branching** Bayesian scenario tree (3-way from closed nodes: reopen/stay-closed/escalate; 2-way from open; escalated absorbing), full branching for `BRANCH_DEPTH` months then a modal tail. |
 | `lng_data.py` | Supply-side data: break-even prices, transport costs, liquefaction capacities (2026 operational), event definitions. Zwickl-Bernhard & Neumann (2024) Table 6 / Appendix A. |
-| `11_epec_2leader.py` | Strategic-comparison model (one-shot two-leader EPEC) **and** the shared market-structure module the LP imports (regions, fringe, capacities, demand blocks, the escalation/reroute capacity derates). |
-| `12_rolling_epec.py` | Rolling-horizon driver for the strategic EPEC comparison. |
+| `archive/` (untracked) | Local-only: the strategic-EPEC comparison (`11_epec_2leader.py`, `12_rolling_epec.py`) and legacy scripts. Gitignored. |
 | `calibration_targets.csv` | Observed monthly TTF / JKM price targets (Sep 2025 – Jun 2026). |
 | `eu_demand_monthly.csv` | Observed EU monthly gas demand 2019 – May 2026 (seasonality + demand-curve anchoring). |
 | `ttf_history.csv` | Historical TTF spot prices for reference. |

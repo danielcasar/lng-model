@@ -1,8 +1,8 @@
-import os, importlib
+import os
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-m11 = importlib.import_module("11_epec_2leader")
+import market as m11
 from model_config import LEADERS, LEADER_REGIONS, demand_blocks_base
 
 REGIONS = ("EU", "Asia")

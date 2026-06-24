@@ -6,7 +6,7 @@ priors, strategic-leader definitions, fringe access, demand staircases,
 seasonality, storage limits, Big-M constants and algorithm settings.
 The supply-side DATA (break-even prices, transport costs, liquefaction
 capacities) lives in lng_data.py, sourced from Zwickl-Bernhard & Neumann
-(2024). The model scripts (11_epec_2leader.py, 12_rolling_epec.py,
+(2024). The model scripts (13_competitive_rolling.py, market.py,
 scenario_tree.py) contain only model logic and import everything from here.
 
 Each value carries its source as an inline comment. The companion sheet
