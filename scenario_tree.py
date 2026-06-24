@@ -42,7 +42,7 @@ from model_config import (
     T_POST_START, T_LAST, CAL_OFFSET,
     ALPHA_C_PRIOR, BETA_C_PRIOR, ALPHA_R_PRIOR, BETA_R_PRIOR,
     ESCALATION_RATE_BASE, ESCALATION_RATE_SLOPE, ESCALATION_RATE_CAP,
-    ESCALATION_HAZARD_BY_K, ESCALATION_PERSIST,
+    ESCALATION_HAZARD_BY_K, ESCALATION_PERSIST, BRANCH_DEPTH,
 )
 
 def _trailing_closed(history):
@@ -124,125 +124,103 @@ def realized_status(t):
 
 
 def build_tree_from(t_start, open_start, alpha_C, beta_C, alpha_R, beta_R,
-                    closed_at_start=0, verbose=False):
-    """Build the scenario tree from an arbitrary starting month and belief
-    state -- the workhorse for ROLLING-HORIZON re-solves.
+                    closed_at_start=0, branch_depth=BRANCH_DEPTH, verbose=False):
+    """Build a PROPER multi-stage BRANCHING scenario tree from t_start.
 
-    The root carries the posterior counts as of t_start (already updated
-    with the observation at t_start). From there the tree walks the
-    realized status path to T_LAST, instantiating at every step the
-    counterfactual sibling (the branch where the closure state would have
-    flipped) so agents' conditional expectations are well-defined.
+    From every node each reachable next state is instantiated, weighted by the
+    agent's belief:
+        OPEN      -> {OPEN (1-p_C),  CLOSED (p_C)}
+        CLOSED    -> {OPEN (p_R), CLOSED (1-p_R-p_esc), ESCALATED (p_esc)}
+        ESCALATED -> {ESCALATED (1.0)}            (absorbing deeper-disruption)
+    p_C, p_R are Beta-Bernoulli posterior means (conjugate-updated per branch);
+    p_esc is the exogenous duration-dependent structural hazard.
 
-    closed_at_start = the number of consecutive months the strait has ALREADY
-    been closed up to and including t_start (>=1 if the root is closed, 0 if
-    open). It seeds the per-node months_closed so the duration-dependent
-    escalation hazard and the realized reroute derate see the TRUE elapsed
-    closure in rolling re-solves -- without it the duration would reset to 1
-    every month (the Bayesian counts persist; the duration must too).
+    The full belief tree is built for the first `branch_depth` months from the
+    root (the decision-relevant window -- enough to span the realized closure
+    from any crisis re-solve); beyond that each node continues along its single
+    MODAL (most-likely) successor to T_LAST, a deterministic tail that anchors
+    the terminal-storage condition. This keeps the path-dependent-belief tree
+    tractable while removing the old caterpillar's foresight: every reopening
+    date inside the window is weighed at its true belief probability, none
+    privileged (the agent cannot "know" the realized reopening month).
 
-    build_tree() (below) is the special case t_start = T_FIRST with prior
-    beliefs -- the full-horizon tree used by the one-shot model.
+    closed_at_start seeds months_closed (consecutive closed months already
+    elapsed up to & incl. t_start) so the duration-dependent escalation hazard
+    and the realized reroute derate see the TRUE elapsed closure.
     """
     nodes = {}
-    realized_ids = []
+    seq = [0]
+    def _new_id():
+        seq[0] += 1
+        return f"n{seq[0]:05d}"
 
-    def _mc(history, closure_open):
-        """True consecutive closed months up to & incl. this node: trailing
-        closed run in-tree, plus the pre-root elapsed closure when the run
-        reaches all the way back to the (closed) root."""
-        if closure_open:
-            return 0
-        tc = _trailing_closed(history)
-        return (closed_at_start + tc - 1) if tc == len(history) else tc
-
-    def add_node(t, closure_open, parent_id, history, edge_prob,
-                 a_C, b_C, a_R, b_R, escalated=False, node_id=None):
-        if node_id is None:
-            h_signature = "".join("O" if h[1] else "C" for h in history)
-            node_id = f"t{t:+d}_{h_signature}" + ("E" if escalated else "")
-        if node_id in nodes:
-            return nodes[node_id]
-        parent_cum = nodes[parent_id].cum_prob if parent_id else 1.0
-        n = TreeNode(
-            node_id=node_id, t=t, closure_open=closure_open,
-            history=history, parent_id=parent_id,
-            cum_prob=parent_cum * edge_prob,
-            alpha_C=a_C, beta_C=b_C, alpha_R=a_R, beta_R=b_R,
-            children=[], escalated=escalated,
-            months_closed=_mc(history, closure_open),
-        )
-        nodes[node_id] = n
-        if parent_id and node_id not in nodes[parent_id].children:
-            nodes[parent_id].children.append(node_id)
-        return n
-
-    root_history = ((t_start, open_start),)
     root = TreeNode(
         node_id="root", t=t_start, closure_open=open_start,
-        history=root_history, parent_id="", cum_prob=1.0,
+        history=((t_start, open_start),), parent_id="", cum_prob=1.0,
         alpha_C=alpha_C, beta_C=beta_C, alpha_R=alpha_R, beta_R=beta_R,
-        children=[], months_closed=_mc(root_history, open_start),
+        children=[], escalated=False,
+        months_closed=(0 if open_start else max(1, closed_at_start)),
     )
     nodes["root"] = root
-    realized_ids.append("root")
 
-    prev_id = "root"
-    for t in range(t_start + 1, T_LAST + 1):
-        parent = nodes[prev_id]
-        if parent.closure_open:
-            # From OPEN: event = closure (rate p_C)
-            p_event = beta_mean(parent.alpha_C, parent.beta_C)
-            open_prob,  close_prob  = 1.0 - p_event, p_event
-            open_counts  = (parent.alpha_C,       parent.beta_C + 1.0,
-                            parent.alpha_R,       parent.beta_R)
-            close_counts = (parent.alpha_C + 1.0, parent.beta_C,
-                            parent.alpha_R,       parent.beta_R)
-        else:
-            # From CLOSED: reopening (learned rate p_R) OR escalation (exogenous
-            # duration-dependent hazard, rising with months-shut). The closed
-            # state retains probability 1 - p_R - p_esc.
-            p_event = beta_mean(parent.alpha_R, parent.beta_R)
-            p_esc   = min(escalation_hazard(parent.months_closed),
-                          max(0.0, 1.0 - p_event - 1e-6))
-            open_prob,  close_prob  = p_event, 1.0 - p_event - p_esc
-            open_counts  = (parent.alpha_C, parent.beta_C,
-                            parent.alpha_R + 1.0, parent.beta_R)
-            close_counts = (parent.alpha_C, parent.beta_C,
-                            parent.alpha_R,       parent.beta_R + 1.0)
+    def add_child(parent, closure_open, escalated, edge_prob, counts):
+        a_C, b_C, a_R, b_R = counts
+        t = parent.t + 1
+        nid = _new_id()
+        child = TreeNode(
+            node_id=nid, t=t, closure_open=closure_open,
+            history=parent.history + ((t, closure_open),),
+            parent_id=parent.node_id, cum_prob=parent.cum_prob * edge_prob,
+            alpha_C=a_C, beta_C=b_C, alpha_R=a_R, beta_R=b_R,
+            children=[], escalated=escalated,
+            months_closed=(0 if closure_open else parent.months_closed + 1),
+        )
+        nodes[nid] = child
+        parent.children.append(nid)
+        return child
 
-        n_open  = add_node(t, True,  prev_id, parent.history + ((t, True),),
-                           open_prob,  *open_counts)
-        n_close = add_node(t, False, prev_id, parent.history + ((t, False),),
-                           close_prob, *close_counts)
-        # Escalation branch: a counterfactual deeper-disruption hung off every
-        # CLOSED node (the downside the closed state otherwise lacks). With
-        # ESCALATION_PERSIST it is an ABSORBING multi-month state -- the
-        # disruption strikes at month t and persists (supply depressed) to the
-        # horizon, so gas carried into the crisis pays off repeatedly in the
-        # bad branch (precautionary-refill incentive). Otherwise a 1-month leaf.
-        if not parent.closure_open and p_esc > 0.0:
-            if ESCALATION_PERSIST:
-                chain_parent, chain_hist, edge = prev_id, parent.history, p_esc
-                for tt in range(t, T_LAST + 1):
-                    chain_hist = chain_hist + ((tt, False),)
-                    n_esc = add_node(tt, False, chain_parent, chain_hist,
-                                     edge, *close_counts, escalated=True,
-                                     node_id=f"esc{t:+d}_t{tt:+d}")
-                    chain_parent, edge = n_esc.node_id, 1.0   # absorbing
-            else:
-                add_node(t, False, prev_id, parent.history + ((t, False),),
-                         p_esc, *close_counts, escalated=True)
+    def successors(node):
+        """(closure_open, escalated, prob, counts) for each child of `node`."""
+        if node.escalated:                                    # absorbing
+            return [(False, True, 1.0,
+                     (node.alpha_C, node.beta_C, node.alpha_R, node.beta_R))]
+        if node.closure_open:
+            p_c = beta_mean(node.alpha_C, node.beta_C)
+            return [
+                (True,  False, 1.0 - p_c,
+                 (node.alpha_C, node.beta_C + 1.0, node.alpha_R, node.beta_R)),
+                (False, False, p_c,
+                 (node.alpha_C + 1.0, node.beta_C, node.alpha_R, node.beta_R)),
+            ]
+        p_r = beta_mean(node.alpha_R, node.beta_R)
+        p_e = min(escalation_hazard(node.months_closed), max(0.0, 1.0 - p_r - 1e-6))
+        return [
+            (True,  False, p_r,
+             (node.alpha_C, node.beta_C, node.alpha_R + 1.0, node.beta_R)),
+            (False, False, 1.0 - p_r - p_e,
+             (node.alpha_C, node.beta_C, node.alpha_R, node.beta_R + 1.0)),
+            (False, True,  p_e,
+             (node.alpha_C, node.beta_C, node.alpha_R, node.beta_R + 1.0)),
+        ]
 
-        nxt = n_open if realized_status(t) else n_close
-        prev_id = nxt.node_id
-        realized_ids.append(prev_id)
+    def expand(node, depth):
+        if node.t >= T_LAST:
+            return
+        opts = successors(node)
+        if depth >= branch_depth and not node.escalated:
+            # beyond the branching window: single MODAL deterministic successor
+            best = max(opts, key=lambda o: o[2])
+            opts = [(best[0], best[1], 1.0, best[3])]
+        for (is_open, is_esc, prob, counts) in opts:
+            if prob <= 1e-9:
+                continue
+            expand(add_child(node, is_open, is_esc, prob, counts), depth + 1)
 
+    expand(root, 0)
+    realized_ids = ["root"]      # no spine: the root IS the realized decision node
     if verbose:
-        print(f"Built tree from t={t_start:+d} with {len(nodes)} nodes, "
-              f"{len(realized_ids)} on realized path")
-        print(f"Realized cumulative probability: {nodes[realized_ids[-1]].cum_prob:.6g}")
-
+        print(f"Built BRANCHING tree from t={t_start:+d}: {len(nodes)} nodes "
+              f"(branch_depth={branch_depth})")
     return nodes, realized_ids
 
 

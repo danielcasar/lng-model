@@ -229,8 +229,14 @@ def make_ctx(nodes, realized_ids, s_init):
         "NODES":        nodes,
         "NODE_IDS":     list(nodes.keys()),
         "REALIZED_IDS": realized_ids,
-        "NOV_NODES":    [node_id for node_id in realized_ids
-                         if calendar_month(nodes[node_id].t) == 10],
+        # Nov-1 storage mandate applies at every OPEN November-snapshot node
+        # (calendar month 10 = end-Oct). It is NOT applied on closed/escalated
+        # branches: during a closure the EU flexibility mechanism suspends the
+        # target, and a still-closed branch physically cannot refill (mandating
+        # it would make the LP infeasible).
+        "NOV_NODES":    [node_id for node_id, node in nodes.items()
+                         if calendar_month(node.t) == 10 and node.closure_open],
+        # Terminal storage anchored at every leaf at the horizon.
         "TERMINAL_IDS": [node_id for node_id, node in nodes.items()
                          if not node.children and node.t == T_LAST],
         "S_INIT":       dict(s_init),

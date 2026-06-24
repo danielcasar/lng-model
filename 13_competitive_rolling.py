@@ -235,8 +235,18 @@ def roll(verbose=True):
 
         s_state = {region: max(0.0, stocks[region][root]) for region in REGIONS}
         if t0 < ROLL_END:
-            child = nodes[realized_ids[1]]
-            counts = (child.alpha_C, child.beta_C, child.alpha_R, child.beta_R)
+            # Carry beliefs by conjugate Bayesian update on the ACTUALLY realized
+            # transition t0 -> t0+1 (the tree no longer has a realized spine to
+            # read counts off; the root is the only realized node).
+            aC, bC, aR, bR = counts
+            nxt_open = realized_status(t0 + 1)
+            if open0:                       # observed OPEN ->
+                if nxt_open: bC += 1.0      #   stayed open
+                else:        aC += 1.0      #   closed
+            else:                           # observed CLOSED ->
+                if nxt_open: aR += 1.0      #   reopened
+                else:        bR += 1.0      #   stayed closed
+            counts = (aC, bC, aR, bR)
 
     report(trajectory, time.time() - t_script)
     return trajectory

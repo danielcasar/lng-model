@@ -123,9 +123,13 @@ BETA_R_PRIOR  = 12.0
 # and worsens the April ceasefire dip (which the model cannot reproduce). With
 # reroute 0.03 this gives price RMSE 4.26 (3.70 excluding the structural April
 # month) and refills storage to ~42 bcm by June (vs 38 under a flat hazard).
-ESCALATION_RATE_BASE  = 0.02  # P(closed->escalated) in the first closed month (k=1)
-ESCALATION_RATE_SLOPE = 0.03  # added hazard per further month the strait stays shut
+ESCALATION_RATE_BASE  = 0.01  # P(closed->escalated) in the first closed month (k=1)
+ESCALATION_RATE_SLOPE = 0.01  # added hazard per further month the strait stays shut
 ESCALATION_RATE_CAP   = 0.40  # maximum monthly escalation hazard
+# v11 re-calibration for the BRANCHING tree: base/slope cut 0.12/0.03 -> 0.01/
+# 0.01. In the proper branching tree the escalation hazard hangs off EVERY
+# closed branch (not just one realized spine as in the old caterpillar), so its
+# effect is multiplied and a much smaller hazard suffices for the crisis premium.
 ESCALATION_LOSS_FRAC  = 0.25  # extra fraction of LNG supply removed if escalated
 
 # DIRECT PER-MONTH CALIBRATION (v9.4): if non-empty, these per-k hazard values
@@ -147,6 +151,21 @@ ESCALATION_HAZARD_BY_K = {}   # e.g. {1:0.10, 2:0.20, 3:0.35, ...}; empty -> par
 # Economically this is the standard precautionary-inventory motive against a
 # persistent disaster state (Wachter & Zhu 2025, QE, "rare disasters").
 ESCALATION_PERSIST = True     # escalated state absorbs to T_LAST (vs 1-month leaf)
+
+# =============================================================================
+# SCENARIO-TREE BRANCHING (v11)
+# =============================================================================
+# The tree is a PROPER multi-stage branching tree: every reachable next state
+# is instantiated at each node (OPEN -> {open, closed}; CLOSED -> {open, closed,
+# escalated}; ESCALATED absorbing), weighted by the agent's belief. The earlier
+# "caterpillar" expanded only the realized path multi-step, which leaked
+# foresight of the realized reopening DATE into the agent's plan. Because the
+# Beta beliefs are path-dependent the full tree does not recombine and is
+# intractable to T_LAST, so we branch fully for BRANCH_DEPTH months from the
+# root (the decision-relevant window -- enough to cover the realized closure
+# from any crisis re-solve) and then continue each node along its single MODAL
+# successor to T_LAST (a deterministic tail for the terminal-storage condition).
+BRANCH_DEPTH = 6              # months of full branching before the modal tail
 
 # =============================================================================
 # REALIZED CRISIS-DEEPENING DERATE -- duration-dependent seaborne-LNG loss (v9)
@@ -174,8 +193,11 @@ ESCALATION_PERSIST = True     # escalated state absorbs to T_LAST (vs 1-month le
 # a small residual drag. Combined (persistent escalation + reroute 0.03) the
 # realized-path price RMSE falls to ~3.9 EUR/MWh and storage REFILLS through the
 # crisis (Mar-Jun) as observed, instead of hugging the 30% floor.
-REROUTE_RATE_PER_MONTH = 0.03   # extra seaborne-LNG loss per month-closed
-REROUTE_CAP            = 0.30   # maximum cumulative derate
+REROUTE_RATE_PER_MONTH = 0.0    # disabled in the branching calibration (v11):
+                                # the branched escalation tail alone carries the
+                                # crisis premium; a non-zero realized derate made
+                                # the crisis profile rise too steeply.
+REROUTE_CAP            = 0.30   # maximum cumulative derate (unused while rate=0)
 
 # =============================================================================
 # STRATEGIC LEADERS
@@ -362,7 +384,15 @@ ASIA_SUMMER_FACTOR = 0.85
 # STORAGE
 # =============================================================================
 
-HOLDING_COST = 0.10    # constant physical storage holding cost (EUR/MWh-month)
+# Constant physical storage holding cost (EUR/MWh per bcm of end-of-month
+# stock). Raised 0.10 -> 0.50 (v11): at 0.10 the cost of carrying gas was so
+# small that storage timing was near-degenerate -- the (large) branching LP
+# picked an over-hold optimum (autumn-2025 storage pinned at ~90 bcm, well above
+# the observed ~82 and above the 80% mandate, distorting pre-crisis prices). A
+# realistic carry cost (capital tied up in stored gas + storage capacity fees;
+# ~0.5 EUR/MWh-month at ~40 EUR/MWh gas) breaks the degeneracy: the agent draws
+# storage down on the observed trajectory and pre-crisis prices normalise.
+HOLDING_COST = 0.50
 
 storage = {
     # EU: aggregate working gas volume ~100 bcm, fill ~85% at model start
@@ -385,10 +415,16 @@ storage = {
 # precautionary (risk-averse) storage behaviour without a risk measure.
 STORAGE_FLOOR_FRAC = 0.30
 
-EU_NOV_TARGET_FRAC = 0.90
-# Crisis-year November (1 Nov 2026, t = +8): the 90% target is unattainable
-# and the EU flexibility mechanism applies. Fulwood (2026, OIES) projects
-# 1 Nov 2026 stocks of 76-81 bcm; we impose 80% (80 bcm).
+# EU Reg 2017/1938 (amended 2022/1032) sets a NOMINAL 90% 1-Nov target, but it
+# carries a flexibility mechanism and 2025 was a notably low-fill year: observed
+# EU stocks peaked at only ~80-83% in autumn 2025 (STORAGE_OBS_EU; GIE AGSI+),
+# i.e. the 90% nominal was not met. We therefore impose the OBSERVED 80% target,
+# not the nominal 90% -- mandating 90% forced the model to over-refill to 90 bcm
+# (vs observed ~82) and, in the branching tree, that over-refill front-loaded EU
+# injection, pulling cargoes off Asia and distorting pre-crisis prices.
+EU_NOV_TARGET_FRAC = 0.80
+# Crisis-year November (1 Nov 2026, t = +8): the EU flexibility mechanism
+# applies; Fulwood (2026, OIES) projects 1 Nov 2026 stocks of 76-81 bcm (80%).
 EU_NOV_TARGET_FRAC_2026 = 0.80
 NOV_2026_T = +8             # tree month of the crisis-year 1-Nov checkpoint
 
